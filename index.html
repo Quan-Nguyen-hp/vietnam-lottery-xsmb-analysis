@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XSMB Adaptive Prediction Dashboard</title>
+  <meta name="description" content="Hệ thống dự đoán thích ứng XSMB tự động cập nhật kết quả và tối ưu hóa trọng số.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #8b5cf6;
+      --primary-glow: rgba(139, 92, 246, 0.15);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.15);
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.15);
+      --accent: #f59e0b;
+      --accent-glow: rgba(245, 158, 11, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem 1.5rem;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    /* Header styling */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #a78bfa, #8b5cf6, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--success);
+      padding: 0.5rem 1rem;
+      border-radius: 99px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* Grid layouts */
+    .grid-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .card-stat {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      transition: transform 0.3s ease, border-color 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card-stat:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    .stat-change {
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+    }
+
+    /* Main Grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (min-width: 900px) {
+      .main-grid {
+        grid-template-columns: 1.2fr 0.8fr;
+      }
+    }
+
+    /* Cards block */
+    .card-main {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1.2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.8rem;
+    }
+
+    /* Prediction Block */
+    .pred-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background: linear-gradient(180deg, rgba(139, 92, 246, 0.05) 0%, rgba(30, 41, 59, 0) 100%);
+      border: 1px dashed rgba(139, 92, 246, 0.3);
+      border-radius: 20px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pred-box::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .pred-date {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      font-weight: 500;
+    }
+
+    .numbers-container {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .number-ball {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #a78bfa 0%, #7c3aed 100%);
+      color: white;
+      font-size: 1.5rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 16px rgba(124, 58, 237, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.2);
+      transform: translateZ(0);
+      transition: transform 0.2s ease;
+    }
+
+    .number-ball:hover {
+      transform: scale(1.1);
+    }
+
+    .pred-detail {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      max-width: 320px;
+    }
+
+    /* History table */
+    .table-container {
+      overflow-x: auto;
+      margin-top: 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th {
+      color: var(--text-muted);
+      font-weight: 500;
+      padding: 0.8rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .pnl-badge {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.8rem;
+    }
+
+    .pnl-plus {
+      background: var(--success-glow);
+      color: var(--success);
+    }
+
+    .pnl-minus {
+      background: var(--danger-glow);
+      color: var(--danger);
+    }
+
+    .badge-gray {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+
+    /* Adaptive Weights Block */
+    .weight-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 0.8rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+    }
+
+    .weight-info {
+      flex: 1;
+      margin-right: 1rem;
+    }
+
+    .weight-name {
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 0.4rem;
+    }
+
+    .weight-progress-container {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .weight-progress {
+      height: 100%;
+      background: linear-gradient(90deg, #a78bfa, #8b5cf6);
+      border-radius: 3px;
+    }
+
+    .weight-val {
+      font-weight: 700;
+      font-size: 1rem;
+      min-width: 45px;
+      text-align: right;
+    }
+
+    /* Chart Block */
+    .chart-container {
+      position: relative;
+      height: 250px;
+      width: 100%;
+      margin-top: 1rem;
+    }
+
+    /* Alert or notice */
+    .notice {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px dashed rgba(245, 158, 11, 0.3);
+      color: var(--accent);
+      padding: 1rem;
+      border-radius: 16px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div>
+        <h1>XSMB Adaptive Predict</h1>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">Hệ thống đồng thuận Ensemble tự động cập nhật & tối ưu hóa</p>
+      </div>
+      <div class="status-badge">
+        <div class="status-dot"></div>
+        <span>GitHub Action Live</span>
+      </div>
+    </header>
+
+    <!-- Stats summary grid -->
+    <div class="grid-stats">
+      <div class="card-stat">
+        <div class="stat-label">Tổng lợi nhuận ròng</div>
+        <div class="stat-value" id="val-total-pnl">0đ</div>
+        <div class="stat-change" id="val-pnl-color">Mức lời/lỗ cộng dồn</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-label">Tỉ lệ ROI</div>
+        <div class="stat-value" id="val-roi">0.00%</div>
+        <div class="stat-change" style="color: var(--text-muted);">Tính trên vốn đầu tư</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-label">Tỉ lệ Thắng ngày</div>
+        <div class="stat-value" id="val-winrate">0%</div>
+        <div class="stat-change" id="val-win-count">0/0 ngày trúng nháy</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-label">Chuỗi Thắng/Thua</div>
+        <div class="stat-value" id="val-streak">—</div>
+        <div class="stat-change" id="val-streak-label">Chuỗi hiện tại</div>
+      </div>
+    </div>
+
+    <!-- Main Content Layout -->
+    <div class="main-grid">
+      <!-- Left side: Today's Prediction & History chart -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Today's prediction card -->
+        <div class="card-main">
+          <div class="card-title">
+            <span>🎯 Dự đoán gần nhất</span>
+            <span style="font-size: 0.85rem; color: var(--text-muted);" id="val-predicted-at">N/A</span>
+          </div>
+
+          <div class="pred-box">
+            <div class="pred-date" id="val-pred-date">—</div>
+            <div class="numbers-container" id="val-numbers">
+              <!-- JS-populated numbers -->
+              <span style="color: var(--text-muted);">Đang tính toán...</span>
+            </div>
+            <div class="pred-detail" id="val-pred-status">
+              Đang tải dữ liệu dự đoán từ GitHub...
+            </div>
+          </div>
+        </div>
+
+        <!-- Profit/loss trend chart -->
+        <div class="card-main">
+          <div class="card-title">📈 Lịch sử lợi nhuận cộng dồn</div>
+          <div class="chart-container">
+            <canvas id="pnlChart"></canvas>
+          </div>
+        </div>
+
+        <!-- History log table -->
+        <div class="card-main">
+          <div class="card-title">🗂️ Lịch sử dự đoán (Gần đây nhất)</div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ngày</th>
+                  <th>Số dự đoán</th>
+                  <th>Trúng</th>
+                  <th>Kết quả XSMB</th>
+                  <th>Lợi nhuận</th>
+                </tr>
+              </thead>
+              <tbody id="val-history-rows">
+                <tr>
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Đang tải lịch sử...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right side: Weights & dynamic config -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Adaptive Weights -->
+        <div class="card-main">
+          <div class="card-title">⚖️ Trọng số Ensemble thích ứng</div>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">Mô hình tự động học và tăng trọng số của thuật toán có hiệu suất cao nhất trong 7 ngày gần nhất.</p>
+          <div id="val-weights-list">
+            <!-- JS-populated weights -->
+          </div>
+        </div>
+
+        <!-- Usage card -->
+        <div class="card-main">
+          <div class="card-title">💡 Thông tin chiến lược</div>
+          <div style="font-size: 0.9rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.8rem;">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Chi phí chọn số:</span>
+              <strong style="color: var(--text-main);">27,000đ / điểm</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Tiền trúng thưởng:</span>
+              <strong style="color: var(--text-main);">99,000đ / nháy</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Số lượng số tối ưu (top_k):</span>
+              <strong style="color: var(--text-main);">4 số / ngày</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Tần suất điều chỉnh:</span>
+              <strong style="color: var(--text-main);">Mỗi 7 ngày (Weekly)</strong>
+            </div>
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.2rem 0;">
+            <p>Hệ thống tự động đồng thuận (Weighted Ensemble) gom 5 thuật toán thống kê độc lập bao gồm Lô khan (MaxDelay), Bạc nhớ (Conditional Probability), Xích Markov, Tần suất động lượng, và Ước lượng Poisson.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Config path
+    const LOG_URL = './predictions/prediction_log.json';
+    const WEIGHTS_URL = './predictions/adaptive_weights.json';
+
+    async function loadDashboard() {
+      try {
+        const [logRes, weightsRes] = await Promise.all([
+          fetch(LOG_URL).catch(() => null),
+          fetch(WEIGHTS_URL).catch(() => null)
+        ]);
+
+        if (!logRes || logRes.status !== 200) {
+          document.getElementById('val-pred-status').innerHTML = '<span style="color: var(--danger);">Không tìm thấy file prediction_log.json. Hãy đợi GitHub Action chạy lần đầu.</span>';
+          return;
+        }
+
+        const logs = await logRes.json();
+        const weightsData = weightsRes ? await weightsRes.json() : null;
+
+        if (logs.length === 0) {
+          document.getElementById('val-pred-status').innerText = 'Chưa có lượt dự đoán nào được lưu trữ.';
+          return;
+        }
+
+        // --- 1. Tách entries có kết quả và chưa có kết quả ---
+        const completed = logs.filter(e => e.actual_results !== null);
+        const pending = logs.filter(e => e.actual_results === null);
+
+        // Hiển thị dự đoán mới nhất (dù là pending hay completed)
+        const latest = logs[logs.length - 1];
+        document.getElementById('val-pred-date').innerText = 'Kỳ dự đoán: ' + latest.date;
+        document.getElementById('val-predicted-at').innerText = 'Tính toán lúc: ' + new Date(latest.predicted_at).toLocaleString('vi-VN');
+
+        const numContainer = document.getElementById('val-numbers');
+        numContainer.innerHTML = '';
+        latest.ensemble_picks.forEach(num => {
+          const ball = document.createElement('span');
+          ball.className = 'number-ball';
+          ball.innerText = String(num).padStart(2, '0');
+          numContainer.appendChild(ball);
+        });
+
+        // Trạng thái dự đoán mới nhất
+        const statusEl = document.getElementById('val-pred-status');
+        if (latest.actual_results === null) {
+          statusEl.innerHTML = `<span class="pnl-badge badge-gray">⏳ Đang chờ kết quả mở thưởng (lúc 18:15)</span>`;
+        } else {
+          const hits = latest.ensemble_hits || 0;
+          const pnl = latest.pnl_k || 0;
+          if (hits > 0) {
+            statusEl.innerHTML = `<span class="pnl-badge pnl-plus">🎉 Trúng ${hits} nháy! Lãi ${pnl * 1000}đ</span>`;
+          } else {
+            statusEl.innerHTML = `<span class="pnl-badge pnl-minus">😔 Trượt! Lỗ ${Math.abs(pnl) * 1000}đ</span>`;
+          }
+        }
+
+        // --- 2. Tính toán thống kê ---
+        if (completed.length > 0) {
+          let totalCost = 0;
+          let totalRev = 0;
+          let winDays = 0;
+
+          completed.forEach(e => {
+            totalCost += e.cost_k || 0;
+            totalRev += e.revenue_k || 0;
+            if ((e.ensemble_hits || 0) > 0) winDays++;
+          });
+
+          const totalPnl = totalRev - totalCost;
+          const roi = (totalPnl / totalCost) * 100;
+          const winRate = (winDays / completed.length) * 100;
+
+          // Cập nhật DOM
+          const pnlValEl = document.getElementById('val-total-pnl');
+          pnlValEl.innerText = (totalPnl >= 0 ? '+' : '') + (totalPnl * 1000).toLocaleString('vi-VN') + 'đ';
+          pnlValEl.style.color = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+          
+          const pnlColorEl = document.getElementById('val-pnl-color');
+          pnlColorEl.innerText = totalPnl >= 0 ? '🟢 Đang có lãi tích luỹ' : '🔴 Tài khoản đang âm';
+          pnlColorEl.style.color = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+
+          document.getElementById('val-roi').innerText = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%';
+          document.getElementById('val-roi').style.color = roi >= 0 ? 'var(--success)' : 'var(--danger)';
+
+          document.getElementById('val-winrate').innerText = winRate.toFixed(0) + '%';
+          document.getElementById('val-win-count').innerText = `${winDays}/${completed.length} ngày trúng nháy`;
+
+          // Tính chuỗi
+          let streak = 0;
+          let streakType = null;
+          for (let i = completed.length - 1; i >= 0; i--) {
+            const hit = (completed[i].ensemble_hits || 0) > 0;
+            if (streakType === null) {
+              streakType = hit ? 'W' : 'L';
+              streak = 1;
+            } else if ((streakType === 'W' && hit) || (streakType === 'L' && !hit)) {
+              streak++;
+            } else {
+              break;
+            }
+          }
+          const streakValEl = document.getElementById('val-streak');
+          streakValEl.innerText = streak + ' ngày';
+          streakValEl.style.color = streakType === 'W' ? 'var(--success)' : 'var(--danger)';
+          document.getElementById('val-streak-label').innerText = 'Chuỗi ' + (streakType === 'W' ? 'thắng' : 'thua') + ' liên tiếp';
+
+          // --- 3. Vẽ biểu đồ PnL ---
+          let cumPnl = 0;
+          const chartLabels = [];
+          const chartData = [];
+
+          completed.forEach(e => {
+            cumPnl += e.pnl_k || 0;
+            chartLabels.push(e.date.substring(5)); // chỉ lấy MM-DD
+            chartData.push(cumPnl * 1000);
+          });
+
+          renderChart(chartLabels, chartData);
+
+          // --- 4. Tạo bảng lịch sử (tối đa 10 dòng gần nhất) ---
+          const historyBody = document.getElementById('val-history-rows');
+          historyBody.innerHTML = '';
+          
+          // Lấy 10 ngày gần nhất
+          const recentLogs = [...completed].reverse().slice(0, 10);
+          recentLogs.forEach(e => {
+            const row = document.createElement('tr');
+            
+            const picksStr = e.ensemble_picks.map(n => String(n).padStart(2, '0')).join(', ');
+            const hits = e.ensemble_hits || 0;
+            const pnl = e.pnl_k || 0;
+            const badgeClass = hits > 0 ? 'pnl-plus' : 'pnl-minus';
+            const badgeText = hits > 0 ? `Trúng ${hits} nháy` : 'Trượt';
+            
+            const uniqueActual = [...new Set(e.actual_results)].sort((a,b)=>a-b);
+            const actualStr = uniqueActual.slice(0, 8).map(n => String(n).padStart(2, '0')).join(' ') + (uniqueActual.length > 8 ? '...' : '');
+
+            row.innerHTML = `
+              <td>${e.date}</td>
+              <td style="font-weight: 500; font-family: monospace;">${picksStr}</td>
+              <td><span class="pnl-badge ${badgeClass}">${badgeText}</span></td>
+              <td style="font-family: monospace; font-size: 0.85rem; color: var(--text-muted);">${actualStr}</td>
+              <td style="font-weight: 600; color: ${pnl >= 0 ? 'var(--success)' : 'var(--danger)'}">
+                ${pnl >= 0 ? '+' : ''}${(pnl * 1000).toLocaleString('vi-VN')}đ
+              </td>
+            `;
+            historyBody.appendChild(row);
+          });
+        }
+
+        // --- 5. Trọng số ---
+        if (weightsData && weightsData.weights) {
+          const weightsList = document.getElementById('val-weights-list');
+          weightsList.innerHTML = '';
+          
+          // Tìm max weight để scale progress bar
+          const maxW = Math.max(...Object.values(weightsData.weights));
+
+          Object.entries(weightsData.weights).forEach(([name, w]) => {
+            const percent = maxW > 0 ? (w / maxW) * 100 : 0;
+            const row = document.createElement('div');
+            row.className = 'weight-row';
+            row.innerHTML = `
+              <div class="weight-info">
+                <div class="weight-name">${name}</div>
+                <div class="weight-progress-container">
+                  <div class="weight-progress" style="width: ${percent}%"></div>
+                </div>
+              </div>
+              <div class="weight-val">${Number(w).toFixed(2)}</div>
+            `;
+            weightsList.appendChild(row);
+          });
+        }
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    let pnlChartInstance = null;
+    function renderChart(labels, data) {
+      const ctx = document.getElementById('pnlChart').getContext('2d');
+      if (pnlChartInstance) {
+        pnlChartInstance.destroy();
+      }
+
+      pnlChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Lợi nhuận cộng dồn (đ)',
+            data: data,
+            borderColor: '#8b5cf6',
+            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 2,
+            pointHoverRadius: 5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { family: 'Outfit' } }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { family: 'Outfit' } }
+            }
+          }
+        }
+      });
+    }
+
+    // Khởi chạy khi load xong
+    window.addEventListener('DOMContentLoaded', loadDashboard);
+  </script>
+</body>
+</html>
