@@ -1,11 +1,11 @@
 """
-daily_predict.py — Dự đoán XSMB hàng ngày (Weighted Ensemble, top_k=4)
+daily_predict.py — Dự đoán XSMB hàng ngày (Matrix Decision, top_k=10)
 
 Cách dùng:
-  uv run daily_predict.py                      # dự đoán ngày hôm nay
-  uv run daily_predict.py --date 2026-07-14    # ngày cụ thể
-  uv run daily_predict.py --top-k 4            # số lượng số chọn
-  uv run daily_predict.py --dry-run            # chỉ in, không lưu log
+  python daily_predict.py                      # dự đoán ngày hôm nay
+  python daily_predict.py --date 2026-07-14    # ngày cụ thể
+  python daily_predict.py --top-k 10           # số lượng số chọn
+  python daily_predict.py --dry-run            # chỉ in, không lưu log
 """
 import sys
 import json
@@ -25,25 +25,20 @@ from methods.conditional_prob import ConditionalProbabilityPredictor
 from methods.markov_chain import MarkovChainPredictor
 from methods.frequency_momentum import FrequencyMomentumPredictor
 from methods.poisson_estimator import PoissonEstimatorPredictor
-from methods.ensemble import EnsemblePredictor
+from methods.loto_repeat import LotoRepeatPredictor
+from methods.inverted_pairs import InvertedPairsPredictor
+from methods.matrix_decision import MatrixDecisionPredictor
 
 # ── Đường dẫn ────────────────────────────────────────────────────────────────
-DATA_CSV     = root_dir / "data" / "xsmb-2-digits.csv"
-PRED_LOG     = root_dir / "predictions" / "prediction_log.json"
-WEIGHTS_FILE = root_dir / "predictions" / "adaptive_weights.json"
+DATA_CSV   = root_dir / "data" / "xsmb-2-digits.csv"
+PRED_LOG   = root_dir / "predictions" / "prediction_log.json"
+RULES_FILE = root_dir / "predictions" / "matrix_rules.json"
 
 COST_PER_NUM   = 27    # nghìn đồng
 PAYOUT_PER_HIT = 99    # nghìn đồng
 TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def load_weights() -> dict:
-    if WEIGHTS_FILE.exists():
-        with open(WEIGHTS_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-        return data.get("weights", {})
-    return {}
 
 def load_log() -> list:
     if PRED_LOG.exists():
@@ -86,17 +81,7 @@ def fetch_today_data():
         print(f"⚠️  Không thể fetch dữ liệu mới: {e}")
         print("   Tiếp tục dùng dữ liệu CSV hiện có")
 
-def build_ensemble(weights: dict) -> EnsemblePredictor:
-    base_preds = [
-        MaxDelayPredictor(),
-        ConditionalProbabilityPredictor(),
-        MarkovChainPredictor(),
-        FrequencyMomentumPredictor(window_size=30),
-        PoissonEstimatorPredictor(window_size=180),
-    ]
-    return EnsemblePredictor(base_preds, weights=weights)
-
-def run_predict(target_date: date, top_k: int, weights: dict) -> dict:
+def run_predict(target_date: date, top_k: int) -> dict:
     """Chạy dự đoán cho target_date, trả về dict entry."""
     df = pd.read_csv(DATA_CSV)
     df["date"] = pd.to_datetime(df["date"])
@@ -116,7 +101,7 @@ def run_predict(target_date: date, top_k: int, weights: dict) -> dict:
     valid = (cols >= 0) & (cols < 100)
     S[rows[valid], cols[valid]] = 1
 
-    # Dự đoán từng phương pháp
+    # Dự đoán từng phương pháp riêng biệt để ghi log
     per_method = {}
     methods = [
         ("Max Delay",          MaxDelayPredictor()),
@@ -124,6 +109,8 @@ def run_predict(target_date: date, top_k: int, weights: dict) -> dict:
         ("MarkovChain",        MarkovChainPredictor()),
         ("FrequencyMomentum",  FrequencyMomentumPredictor(window_size=30)),
         ("PoissonEstimator",   PoissonEstimatorPredictor(window_size=180)),
+        ("LotoRepeat",         LotoRepeatPredictor()),
+        ("InvertedPairs",      InvertedPairsPredictor()),
     ]
     for name, pred in methods:
         try:
@@ -132,17 +119,17 @@ def run_predict(target_date: date, top_k: int, weights: dict) -> dict:
         except Exception as e:
             per_method[name] = []
 
-    # Ensemble
-    ensemble = build_ensemble(weights)
-    ensemble_picks = ensemble.predict(history, top_k=top_k, S=S)
+    # Dự đoán bằng Matrix Decision Predictor
+    predictor = MatrixDecisionPredictor(rules_path=str(RULES_FILE))
+    matrix_picks = predictor.predict(history, top_k=top_k, S=S)
 
     return {
         "date"             : str(target_date),
         "predicted_at"     : datetime.now(TZ).isoformat(),
         "top_k"            : top_k,
-        "ensemble_picks"   : ensemble_picks,
+        "ensemble_picks"   : matrix_picks,  # giữ key ensemble_picks để tương thích với HTML dashboard
         "per_method"       : per_method,
-        "weights_used"     : weights,
+        "weights_used"     : predictor.rules,  # lưu rules sử dụng vào key weights_used để tương thích
         "actual_results"   : None,
         "ensemble_hits"    : None,
         "per_method_hits"  : None,
@@ -161,7 +148,7 @@ def print_prediction(entry: dict) -> None:
     print("╔══════════════════════════════════════════════════════╗")
     print(f"║  🎯  DỰ ĐOÁN XSMB — {target_date}                    ║")
     print("╠══════════════════════════════════════════════════════╣")
-    print(f"║  Phương pháp : Weighted Ensemble (5 mô hình)         ║")
+    print(f"║  Phương pháp : Ma trận Quyết định (Matrix Decision)   ║")
     print(f"║  Chọn {top_k} số    : {', '.join(f'{n:02d}' for n in picks):<44}║")
     print(f"║  Chi phí     : {top_k} × {COST_PER_NUM},000đ = {cost:,},000đ{' '*20}║")
     print(f"║  Trúng 1 số  : {PAYOUT_PER_HIT},000đ/nháy{' '*32}║")
@@ -178,7 +165,7 @@ def print_prediction(entry: dict) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Dự đoán XSMB hàng ngày")
     parser.add_argument("--date",    type=str, default=None, help="Ngày dự đoán (YYYY-MM-DD), mặc định là hôm nay")
-    parser.add_argument("--top-k",  type=int, default=4,    help="Số lượng số chọn (mặc định 4)")
+    parser.add_argument("--top-k",  type=int, default=10,   help="Số lượng số chọn (mặc định 10)")
     parser.add_argument("--dry-run", action="store_true",   help="Chỉ in kết quả, không lưu log")
     parser.add_argument("--no-fetch", action="store_true",  help="Bỏ qua bước fetch dữ liệu mới")
     args = parser.parse_args()
@@ -194,29 +181,26 @@ def main():
     if not args.no_fetch:
         fetch_today_data()
 
-    # Load trọng số thích ứng
-    weights = load_weights()
-    print(f"\n📦 Trọng số hiện tại: {weights}")
-
     # Kiểm tra đã dự đoán ngày này chưa
     log = load_log()
-    existing = [e for e in log if e["date"] == str(target_date)]
+    existing = [e for e in log if e["date"] == str(target_date) and e.get("top_k") == args.top_k]
     if existing and not args.dry_run:
-        print(f"\n⚠️  Đã có dự đoán cho ngày {target_date}. Dùng --dry-run để xem lại.")
+        print(f"\n⚠️  Đã có dự đoán {args.top_k} số cho ngày {target_date}. Dùng --dry-run để xem lại.")
         print_prediction(existing[0])
         return
 
     # Chạy dự đoán
     print(f"\n🔮 Đang tính dự đoán cho {target_date}…")
-    entry = run_predict(target_date, args.top_k, weights)
+    entry = run_predict(target_date, args.top_k)
 
     # In kết quả
     print_prediction(entry)
 
-    # Lưu vào log
+    # Lưu vào log (xóa các bản ghi nháp cùng ngày nếu có để tránh trùng lặp)
     if not args.dry_run:
-        log.append(entry)
-        save_log(log)
+        cleaned_log = [e for e in log if not (e["date"] == str(target_date) and e.get("top_k") == args.top_k)]
+        cleaned_log.append(entry)
+        save_log(cleaned_log)
         print(f"✅ Đã lưu dự đoán vào {PRED_LOG}")
     else:
         print("ℹ️  Dry-run: không lưu log")

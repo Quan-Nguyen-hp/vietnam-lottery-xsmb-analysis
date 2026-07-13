@@ -1,0 +1,17 @@
+{
+  "updated_at": "2026-07-13T22:22:59.175190",
+  "backtest_days": 180,
+  "roi_achieved": 11.018518518518519,
+  "pnl_achieved": 5355,
+  "win_rate": 94.44444444444444,
+  "rules": {
+    "delay_min": 0.31,
+    "delay_max": 0.62,
+    "poisson_min": 0.39,
+    "markov_min": 0.04,
+    "momentum_min": 0.02,
+    "repeat_min": 0.25,
+    "pairs_min": 0.17,
+    "cond_prob_min": 0.18
+  }
+}

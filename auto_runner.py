@@ -47,7 +47,7 @@ def already_predicted(target_date: date) -> bool:
         return False
     with open(PRED_LOG, encoding="utf-8") as f:
         log_data = json.load(f)
-    return any(e["date"] == str(target_date) for e in log_data)
+    return any(e["date"] == str(target_date) and e.get("top_k") == 10 for e in log_data)
 
 def already_updated(target_date: date) -> bool:
     if not PRED_LOG.exists():
@@ -55,7 +55,7 @@ def already_updated(target_date: date) -> bool:
     with open(PRED_LOG, encoding="utf-8") as f:
         log_data = json.load(f)
     for e in log_data:
-        if e["date"] == str(target_date) and e.get("actual_results") is not None:
+        if e["date"] == str(target_date) and e.get("top_k") == 10 and e.get("actual_results") is not None:
             return True
     return False
 

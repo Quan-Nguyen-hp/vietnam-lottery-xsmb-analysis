@@ -1,9 +1,9 @@
 """
-prediction_dashboard.py — Xem thống kê hiệu suất dự đoán
+prediction_dashboard.py — Xem thống kê hiệu suất dự đoán (bản nâng cấp Matrix Decision)
 
 Cách dùng:
-  uv run prediction_dashboard.py           # toàn bộ lịch sử
-  uv run prediction_dashboard.py --days 30 # 30 ngày gần nhất
+  python prediction_dashboard.py           # toàn bộ lịch sử
+  python prediction_dashboard.py --days 30 # 30 ngày gần nhất
 """
 import sys
 import json
@@ -14,8 +14,8 @@ from zoneinfo import ZoneInfo
 
 root_dir = Path(__file__).parent
 
-PRED_LOG     = root_dir / "predictions" / "prediction_log.json"
-WEIGHTS_FILE = root_dir / "predictions" / "adaptive_weights.json"
+PRED_LOG   = root_dir / "predictions" / "prediction_log.json"
+RULES_FILE = root_dir / "predictions" / "matrix_rules.json"
 TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 COST_PER_NUM   = 27
@@ -49,7 +49,7 @@ def main():
 
     SEP = "═" * 62
     print(f"\n{'╔' + SEP + '╗'}")
-    title = f"  📊  DASHBOARD DỰ ĐOÁN XSMB"
+    title = f"  📊  DASHBOARD DỰ ĐOÁN XSMB (Matrix Decision)"
     if args.days:
         title += f" — {args.days} NGÀY GẦN NHẤT"
     print(f"║{title:<62}║")
@@ -98,7 +98,7 @@ def main():
 
     # ── Phân phối PnL theo tháng ──────────────────────────────────────────
     from collections import defaultdict
-    monthly: dict = defaultdict(lambda: {"pnl": 0, "cost": 0, "win": 0, "total": 0})
+    monthly = defaultdict(lambda: {"pnl": 0, "cost": 0, "win": 0, "total": 0})
     for e in completed:
         ym = e["date"][:7]
         monthly[ym]["pnl"]   += e.get("pnl_k", 0) or 0
@@ -120,30 +120,32 @@ def main():
 
     print(f"{'╠' + SEP + '╣'}")
 
-    # ── Trọng số hiện tại ─────────────────────────────────────────────────
-    if WEIGHTS_FILE.exists():
-        with open(WEIGHTS_FILE, encoding="utf-8") as f:
-            wdata = json.load(f)
-        weights     = wdata.get("weights", {})
-        updated_at  = wdata.get("updated_at", "Chưa cập nhật")
-        print(f"║  ⚖️  TRỌNG SỐ HIỆN TẠI (cập nhật: {updated_at[:10] if updated_at else 'N/A':<15})║")
-        for name, w in weights.items():
-            short = name[:35]
-            bar_w = "▓" * min(int(w * 2), 14)
-            print(f"║    {short:<35} {w:>5.2f}  {bar_w:<14}║")
+    # ── Quy tắc lọc ma trận hiện tại ──────────────────────────────────────
+    if RULES_FILE.exists():
+        with open(RULES_FILE, encoding="utf-8") as f:
+            rdata = json.load(f)
+        rules = rdata.get("rules", {})
+        updated_at = rdata.get("updated_at", "Chưa cập nhật")
+        print(f"║  ⚖️  BỘ LỌC MA TRẬN TỐI ƯU (Cập nhật: {updated_at[:10] if updated_at else 'N/A':<14})║")
+        for name, val in rules.items():
+            bar_w = "▓" * min(int(val * 15), 14)
+            print(f"║    {name:<22}: {val:>5.2f}  {bar_w:<14}{' '*14}║")
 
     print(f"║{' '*62}║")
     # ── Lịch sử 10 ngày gần nhất ──────────────────────────────────────────
     print(f"║  🗂️  10 NGÀY GẦN NHẤT{' '*41}║")
-    print(f"║  {'Ngày':<12} {'Chọn':>12} {'Trúng':>6} {'PnL':>10}  {'':>14}║")
-    print(f"║  {'-'*12} {'-'*12} {'-'*6} {'-'*10}  {'-'*14}║")
+    print(f"║  {'Ngày':<12} {'Số chọn':>14} {'Trúng':>6} {'PnL':>10}  {'':>12}║")
+    print(f"║  {'-'*12} {'-'*14} {'-'*6} {'-'*10}  {'-'*12}║")
     for e in completed[-10:]:
-        picks_str = ",".join(f"{n:02d}" for n in (e.get("ensemble_picks") or []))
+        picks_list = e.get("ensemble_picks") or []
+        picks_str = ",".join(f"{n:02d}" for n in picks_list[:5])
+        if len(picks_list) > 5:
+            picks_str += ".."
         hits  = e.get("ensemble_hits") or 0
         pnl   = e.get("pnl_k") or 0
         icon  = "✅" if hits > 0 else "  "
         pnl_s = f"{pnl:>+,}kđ"
-        print(f"║  {e['date']:<12} {picks_str:>12} {icon}{hits:>4} {pnl_s:>10}  {'':>14}║")
+        print(f"║  {e['date']:<12} {picks_str:>14} {icon}{hits:>4} {pnl_s:>10}  {'':>12}║")
 
     print(f"{'╚' + SEP + '╝'}")
 
@@ -151,7 +153,8 @@ def main():
     if pending:
         print(f"\n⏳ Đang chờ kết quả ({len(pending)} ngày):")
         for e in pending[-5:]:
-            picks_str = ",".join(f"{n:02d}" for n in (e.get("ensemble_picks") or []))
+            picks_list = e.get("ensemble_picks") or []
+            picks_str = ",".join(f"{n:02d}" for n in picks_list)
             print(f"   {e['date']}: chọn [{picks_str}]")
 
 if __name__ == "__main__":

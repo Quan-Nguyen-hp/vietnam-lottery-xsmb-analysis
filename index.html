@@ -205,7 +205,9 @@
 
     .numbers-container {
       display: flex;
-      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.8rem;
       margin-bottom: 1.5rem;
     }
 
@@ -449,10 +451,10 @@
       <div style="display: flex; flex-direction: column; gap: 1.5rem;">
         <!-- Adaptive Weights -->
         <div class="card-main">
-          <div class="card-title">⚖️ Trọng số Ensemble thích ứng</div>
-          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">Mô hình tự động học và tăng trọng số của thuật toán có hiệu suất cao nhất trong 7 ngày gần nhất.</p>
+          <div class="card-title">⚖️ Bộ lọc Ma trận Quyết định</div>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">Ngưỡng lọc đặc trưng tối ưu được tự động tìm kiếm và cập nhật từ backtest lịch sử 365 ngày.</p>
           <div id="val-weights-list">
-            <!-- JS-populated weights -->
+            <!-- JS-populated rules -->
           </div>
         </div>
 
@@ -470,14 +472,14 @@
             </div>
             <div style="display: flex; justify-content: space-between;">
               <span>Số lượng số tối ưu (top_k):</span>
-              <strong style="color: var(--text-main);">4 số / ngày</strong>
+              <strong style="color: var(--text-main);">10 số / ngày</strong>
             </div>
             <div style="display: flex; justify-content: space-between;">
               <span>Tần suất điều chỉnh:</span>
               <strong style="color: var(--text-main);">Mỗi 7 ngày (Weekly)</strong>
             </div>
             <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.2rem 0;">
-            <p>Hệ thống tự động đồng thuận (Weighted Ensemble) gom 5 thuật toán thống kê độc lập bao gồm Lô khan (MaxDelay), Bạc nhớ (Conditional Probability), Xích Markov, Tần suất động lượng, và Ước lượng Poisson.</p>
+            <p>Hệ thống tự động chấm điểm và xây dựng ma trận đặc trưng cho từng số loto (trễ khan, phân phối Poisson, chuyển trạng thái Markov, lô rơi, lô lộn...). Chỉ các số vượt qua bộ lọc tối ưu mới được chọn.</p>
           </div>
         </div>
       </div>
@@ -487,7 +489,7 @@
   <script>
     // Config path
     const LOG_URL = './predictions/prediction_log.json';
-    const WEIGHTS_URL = './predictions/adaptive_weights.json';
+    const WEIGHTS_URL = './predictions/matrix_rules.json';
 
     async function loadDashboard() {
       try {
@@ -635,16 +637,18 @@
           });
         }
 
-        // --- 5. Trọng số ---
-        if (weightsData && weightsData.weights) {
+        // --- 5. Quy tắc lọc ---
+        if (weightsData && weightsData.rules) {
           const weightsList = document.getElementById('val-weights-list');
           weightsList.innerHTML = '';
           
-          // Tìm max weight để scale progress bar
-          const maxW = Math.max(...Object.values(weightsData.weights));
-
-          Object.entries(weightsData.weights).forEach(([name, w]) => {
-            const percent = maxW > 0 ? (w / maxW) * 100 : 0;
+          Object.entries(weightsData.rules).forEach(([name, val]) => {
+            let percent = val * 100;
+            if (name.includes('max') && val > 1) {
+              percent = val;
+            }
+            percent = Math.min(100, Math.max(0, percent));
+            
             const row = document.createElement('div');
             row.className = 'weight-row';
             row.innerHTML = `
@@ -654,7 +658,7 @@
                   <div class="weight-progress" style="width: ${percent}%"></div>
                 </div>
               </div>
-              <div class="weight-val">${Number(w).toFixed(2)}</div>
+              <div class="weight-val">${Number(val).toFixed(2)}</div>
             `;
             weightsList.appendChild(row);
           });

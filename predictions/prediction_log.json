@@ -171,13 +171,19 @@
   },
   {
     "date": "2026-07-14",
-    "predicted_at": "2026-07-13T22:09:53.246435+07:00",
-    "top_k": 4,
+    "predicted_at": "2026-07-13T22:23:07.462528+07:00",
+    "top_k": 10,
     "ensemble_picks": [
-      88,
-      38,
-      12,
-      6
+      73,
+      52,
+      90,
+      72,
+      57,
+      62,
+      83,
+      45,
+      43,
+      61
     ],
     "per_method": {
       "Max Delay": [
@@ -289,19 +295,66 @@
         79,
         7,
         87
+      ],
+      "LotoRepeat": [
+        55,
+        80,
+        68,
+        97,
+        30,
+        76,
+        5,
+        92,
+        31,
+        75,
+        53,
+        89,
+        24,
+        32,
+        13,
+        3,
+        64,
+        1,
+        50,
+        42
+      ],
+      "InvertedPairs": [
+        65,
+        55,
+        58,
+        50,
+        29,
+        86,
+        24,
+        76,
+        5,
+        79,
+        46,
+        8,
+        10,
+        23,
+        6,
+        31,
+        35,
+        67,
+        13,
+        42
       ]
     },
     "weights_used": {
-      "Max Delay (Lô Khan)": 3.0,
-      "Bạc Nhớ (Conditional Similarity)": 0.5,
-      "Xích Markov (Markov Chain)": 1.0,
-      "Tần suất Động lượng (Frequency Momentum - 30 ngày)": 5.0,
-      "Ước lượng Poisson (Poisson Estimator - 180 ngày)": 3.5
+      "delay_min": 0.31,
+      "delay_max": 0.62,
+      "poisson_min": 0.39,
+      "markov_min": 0.04,
+      "momentum_min": 0.02,
+      "repeat_min": 0.25,
+      "pairs_min": 0.17,
+      "cond_prob_min": 0.18
     },
     "actual_results": null,
     "ensemble_hits": null,
     "per_method_hits": null,
-    "cost_k": 108,
+    "cost_k": 270,
     "revenue_k": null,
     "pnl_k": null
   }

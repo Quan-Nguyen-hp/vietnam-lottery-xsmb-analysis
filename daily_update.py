@@ -1,14 +1,16 @@
 """
-daily_update.py — Cập nhật kết quả thực tế + điều chỉnh trọng số (mỗi 7 ngày)
+daily_update.py — Cập nhật kết quả thực tế + tối ưu bộ lọc ma trận quyết định (mỗi 7 ngày)
 
 Cách dùng:
-  uv run daily_update.py                         # tự fetch kết quả hôm nay
-  uv run daily_update.py --date 2026-07-13       # cập nhật ngày cụ thể
-  uv run daily_update.py --force-reweight        # bắt buộc tính lại trọng số ngay
+  python daily_update.py                         # tự fetch kết quả hôm nay
+  python daily_update.py --date 2026-07-13       # cập nhật ngày cụ thể
+  python daily_update.py --force-reweight        # bắt buộc tối ưu hóa lại bộ lọc ngay
 """
 import sys
 import json
 import argparse
+import subprocess
+import shutil
 from datetime import datetime, date, time as dtime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -20,17 +22,14 @@ import numpy as np
 import pandas as pd
 
 # ── Đường dẫn ────────────────────────────────────────────────────────────────
-DATA_CSV     = root_dir / "data" / "xsmb-2-digits.csv"
-PRED_LOG     = root_dir / "predictions" / "prediction_log.json"
-WEIGHTS_FILE = root_dir / "predictions" / "adaptive_weights.json"
+DATA_CSV   = root_dir / "data" / "xsmb-2-digits.csv"
+PRED_LOG   = root_dir / "predictions" / "prediction_log.json"
+RULES_FILE = root_dir / "predictions" / "matrix_rules.json"
 
 TZ             = ZoneInfo("Asia/Ho_Chi_Minh")
 COST_PER_NUM   = 27
 PAYOUT_PER_HIT = 99
-ALPHA          = 0.15    # tốc độ học trọng số
-WEIGHT_MIN     = 0.1
-WEIGHT_MAX     = 10.0
-REWEIGHT_EVERY = 7       # số ngày giữa các lần cập nhật trọng số
+OPTIMIZE_EVERY = 7       # số ngày giữa các lần chạy tối ưu hóa
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,15 +43,11 @@ def save_log(log: list) -> None:
     with open(PRED_LOG, "w", encoding="utf-8") as f:
         json.dump(log, f, ensure_ascii=False, indent=2)
 
-def load_weights_data() -> dict:
-    if WEIGHTS_FILE.exists():
-        with open(WEIGHTS_FILE, encoding="utf-8") as f:
+def load_rules_data() -> dict:
+    if RULES_FILE.exists():
+        with open(RULES_FILE, encoding="utf-8") as f:
             return json.load(f)
-    return {"weights": {}, "updated_at": None, "window_days": 7, "rolling_stats": {}}
-
-def save_weights_data(data: dict) -> None:
-    with open(WEIGHTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"updated_at": None, "rules": {}}
 
 def fetch_results_for_date(target_date: date) -> list[int] | None:
     """Fetch kết quả 2 chữ số cuối từ web cho target_date."""
@@ -79,92 +74,12 @@ def fetch_results_for_date(target_date: date) -> list[int] | None:
         print(f"⚠️  Không thể fetch: {e}")
         return None
 
-def compute_hits(picks: list[int], actual: list[int]) -> dict:
-    """Tính số nháy trúng và revenue."""
-    actual_counts = {}
-    for v in actual:
-        actual_counts[v] = actual_counts.get(v, 0) + 1
-    hits = sum(actual_counts.get(n, 0) for n in picks)
-    return hits
-
-def recompute_weights(log: list, current_weights: dict) -> tuple[dict, dict]:
-    """
-    Tính lại trọng số dựa trên 7 ngày gần nhất có kết quả.
-    Trả về (new_weights, rolling_stats)
-    """
-    # Lọc entries có actual_results
-    completed = [e for e in log if e.get("actual_results") is not None]
-    if len(completed) < 3:
-        print(f"  Chưa đủ dữ liệu ({len(completed)} ngày có kết quả, cần ≥ 3)")
-        return current_weights, {}
-
-    window = completed[-REWEIGHT_EVERY:]  # 7 ngày gần nhất
-
-    # Tính ROI của từng phương pháp trong window
-    method_names = list(window[0].get("per_method", {}).keys()) if window else []
-    method_stats = {}
-
-    for method in method_names:
-        hits_list = []
-        roi_list  = []
-        for entry in window:
-            picks   = entry.get("per_method", {}).get(method, [])[:entry.get("top_k", 4)]
-            actual  = entry.get("actual_results", [])
-            top_k   = entry.get("top_k", 4)
-            if not picks or not actual:
-                continue
-            hits = compute_hits(picks, actual)
-            cost = top_k * COST_PER_NUM
-            rev  = hits * PAYOUT_PER_HIT
-            roi  = (rev - cost) / cost * 100
-            hits_list.append(hits)
-            roi_list.append(roi)
-        if not roi_list:
-            continue
-        method_stats[method] = {
-            "avg_roi"   : float(np.mean(roi_list)),
-            "hit_rate"  : float(np.mean([h > 0 for h in hits_list])),
-            "n_days"    : len(roi_list),
-        }
-
-    if not method_stats:
-        return current_weights, {}
-
-    # Điều chỉnh trọng số theo ROI tương đối
-    avg_roi = np.mean([s["avg_roi"] for s in method_stats.values()])
-    new_weights = dict(current_weights)
-
-    for method, stats in method_stats.items():
-        # Tìm tên đầy đủ trong current_weights (partial match)
-        matched_key = None
-        for k in current_weights:
-            # Match theo từ đầu tiên của tên phương pháp
-            method_short = method.split()[0].lower()
-            k_short      = k.split()[0].lower()
-            if method_short in k.lower() or method in k or k in method:
-                matched_key = k
-                break
-        if matched_key is None:
-            continue
-
-        old_w    = current_weights.get(matched_key, 1.0)
-        delta    = stats["avg_roi"] - avg_roi
-        adj      = ALPHA * delta / 100  # normalize
-        new_w    = old_w * (1 + adj)
-        new_w    = max(WEIGHT_MIN, min(WEIGHT_MAX, new_w))
-        new_weights[matched_key] = round(new_w, 3)
-
-        direction = "⬆" if new_w > old_w else ("⬇" if new_w < old_w else "─")
-        print(f"  {direction} {matched_key:<45}: {old_w:.3f} → {new_w:.3f}  (ROI {stats['avg_roi']:+.1f}%)")
-
-    return new_weights, method_stats
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Cập nhật kết quả XSMB và trọng số")
+    parser = argparse.ArgumentParser(description="Cập nhật kết quả XSMB và tối ưu bộ lọc")
     parser.add_argument("--date",          type=str, default=None, help="Ngày cần cập nhật (YYYY-MM-DD)")
-    parser.add_argument("--force-reweight", action="store_true",   help="Bắt buộc tính lại trọng số ngay")
+    parser.add_argument("--force-reweight", action="store_true",   help="Bắt buộc chạy tối ưu lại bộ lọc ngay")
     args = parser.parse_args()
 
     # Xác định ngày cần cập nhật
@@ -202,7 +117,7 @@ def main():
             print(f"❌ Không thể lấy kết quả ngày {target_date}.")
             return
 
-        top_k  = entry.get("top_k", 4)
+        top_k  = entry.get("top_k", 10)
         picks  = entry.get("ensemble_picks", [])
 
         # Tính hits và PnL
@@ -243,36 +158,46 @@ def main():
             icon = "✅" if hits > 0 else "  "
             print(f"    {icon} {method:<22}: {hits} nháy")
 
-    # ── Cập nhật trọng số (mỗi 7 ngày) ───────────────────────────────────
-    weights_data = load_weights_data()
-    last_update  = weights_data.get("updated_at")
-    should_reweight = args.force_reweight
+    # ── Tối ưu hoá bộ lọc ma trận (mỗi 7 ngày) ───────────────────────────
+    rules_data = load_rules_data()
+    last_update = rules_data.get("updated_at")
+    should_optimize = args.force_reweight
 
-    if not should_reweight and last_update:
+    if not should_optimize and last_update:
         last_dt = datetime.fromisoformat(last_update)
         days_since = (datetime.now(TZ) - last_dt).days
-        if days_since >= REWEIGHT_EVERY:
-            should_reweight = True
-            print(f"\n📅 Đã {days_since} ngày kể từ lần cập nhật cuối → cập nhật trọng số…")
+        if days_since >= OPTIMIZE_EVERY:
+            should_optimize = True
+            print(f"\n📅 Đã {days_since} ngày kể từ lần tối ưu hoá gần nhất → chạy lại bộ tối ưu…")
 
-    if not should_reweight and not last_update:
+    if not should_optimize and not last_update:
         completed_count = sum(1 for e in log if e.get("actual_results") is not None)
-        if completed_count >= REWEIGHT_EVERY:
-            should_reweight = True
+        if completed_count >= OPTIMIZE_EVERY:
+            should_optimize = True
 
-    if should_reweight:
-        print("\n⚖️  Tính lại trọng số Ensemble dựa trên hiệu suất gần đây:")
-        current_weights = weights_data.get("weights", {})
-        new_weights, rolling_stats = recompute_weights(log, current_weights)
-
-        weights_data["weights"]       = new_weights
-        weights_data["updated_at"]    = datetime.now(TZ).isoformat()
-        weights_data["rolling_stats"] = rolling_stats
-        save_weights_data(weights_data)
-        print(f"\n✅ Đã lưu trọng số mới vào {WEIGHTS_FILE}")
+    if should_optimize:
+        print("\n⚖️  Đang chạy tối ưu hoá lại bộ lọc ma trận quyết định trên dữ liệu mới nhất...")
+        
+        # Chạy matrix_optimizer.py
+        uv_bin = shutil.which("uv")
+        if uv_bin:
+            cmd = [uv_bin, "run", "backtests/matrix_optimizer.py"]
+        else:
+            cmd = [sys.executable, "backtests/matrix_optimizer.py"]
+            
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root_dir))
+        if result.returncode == 0:
+            print("✅ Tối ưu hoá hoàn thành thành công!")
+            if result.stdout:
+                # Trích xuất 10 dòng cuối cùng của log tối ưu
+                lines = result.stdout.strip().splitlines()
+                for line in lines[-8:]:
+                    print(f"  {line}")
+        else:
+            print(f"❌ Lỗi khi chạy tối ưu hoá bộ lọc: {result.stderr}")
     else:
         completed = sum(1 for e in log if e.get("actual_results") is not None)
-        print(f"\nℹ️  Trọng số chưa được cập nhật ({completed} ngày có kết quả / cần {REWEIGHT_EVERY})")
+        print(f"\nℹ️  Bộ lọc chưa được tối ưu lại ({completed} ngày có kết quả / cần {OPTIMIZE_EVERY})")
 
     # ── Thống kê tổng hợp ─────────────────────────────────────────────────
     completed_entries = [e for e in log if e.get("actual_results") is not None]
