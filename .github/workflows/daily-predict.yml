@@ -43,6 +43,5 @@ jobs:
           git config --global user.name "GitHub Action"
           git add predictions/prediction_log.json
           git add predictions/adaptive_weights.json
-          git add predictions/auto_runner.log
           git commit -m "auto: predict/update $(date +'%Y-%m-%d %H:%M UTC')"
           git push origin main
