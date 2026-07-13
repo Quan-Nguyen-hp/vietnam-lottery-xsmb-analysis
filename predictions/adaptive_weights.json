@@ -1,0 +1,13 @@
+{
+  "updated_at": null,
+  "window_days": 7,
+  "weights": {
+    "Max Delay (Lô Khan)": 3.0,
+    "Bạc Nhớ (Conditional Similarity)": 0.5,
+    "Xích Markov (Markov Chain)": 1.0,
+    "Tần suất Động lượng (Frequency Momentum - 30 ngày)": 5.0,
+    "Ước lượng Poisson (Poisson Estimator - 180 ngày)": 3.5
+  },
+  "rolling_stats": {},
+  "note": "Trọng số khởi tạo dựa trên backtest 1000 ngày. Sẽ tự cập nhật mỗi 7 ngày."
+}
