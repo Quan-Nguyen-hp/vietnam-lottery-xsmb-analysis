@@ -33,7 +33,7 @@ from probability import get_all_models
 from probability.lgb_model import LightGBMProbabilityModel
 from meta.fusion import MetaFusion
 from decision.engine import DecisionEngine
-from sklearn.calibration import CalibratedClassifierCV
+from sklearn.calibration import CalibratedClassifierCV, FrozenEstimator
 
 DATA_CSV = root_dir / "data" / "xsmb-2-digits.csv"
 PRED_LOG = root_dir / "predictions" / "prediction_log.json"
@@ -230,7 +230,7 @@ def run_predict(target_date: date, top_k: int = 4) -> dict:
     y_cal_sel = y_val[half_samples:]
     
     # Sigmoid Calibration Fit & Composite Score (D3 Point B)
-    cal_sig = CalibratedClassifierCV(estimator=lgb_model._model, method="sigmoid", cv="prefit")
+    cal_sig = CalibratedClassifierCV(estimator=FrozenEstimator(lgb_model._model), method="sigmoid")
     cal_sig.fit(X_cal_fit, y_cal_fit)
     p_sig_sel = cal_sig.predict_proba(X_cal_sel)[:, 1]
     brier_sig = float(np.mean((p_sig_sel - y_cal_sel) ** 2))
@@ -240,7 +240,7 @@ def run_predict(target_date: date, top_k: int = 4) -> dict:
     score_sig = 0.5 * brier_sig + 0.3 * logloss_sig + 0.2 * ece_sig
     
     # Isotonic Calibration Fit & Composite Score
-    cal_iso = CalibratedClassifierCV(estimator=lgb_model._model, method="isotonic", cv="prefit")
+    cal_iso = CalibratedClassifierCV(estimator=FrozenEstimator(lgb_model._model), method="isotonic")
     cal_iso.fit(X_cal_fit, y_cal_fit)
     p_iso_sel = cal_iso.predict_proba(X_cal_sel)[:, 1]
     brier_iso = float(np.mean((p_iso_sel - y_cal_sel) ** 2))

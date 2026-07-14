@@ -47,7 +47,12 @@ def already_predicted(target_date: date) -> bool:
         return False
     with open(PRED_LOG, encoding="utf-8") as f:
         log_data = json.load(f)
-    return any(e["date"] == str(target_date) and e.get("top_k") == 10 for e in log_data)
+    for e in log_data:
+        d_val = e["pipeline_metadata"]["date"] if "pipeline_metadata" in e else e.get("date")
+        # Bản v1.2 APPROVED lưu top_k trong bets hoặc metadata, chỉ cần so ngày là đủ
+        if d_val == str(target_date):
+            return True
+    return False
 
 def already_updated(target_date: date) -> bool:
     if not PRED_LOG.exists():
@@ -55,7 +60,8 @@ def already_updated(target_date: date) -> bool:
     with open(PRED_LOG, encoding="utf-8") as f:
         log_data = json.load(f)
     for e in log_data:
-        if e["date"] == str(target_date) and e.get("top_k") == 10 and e.get("actual_results") is not None:
+        d_val = e["pipeline_metadata"]["date"] if "pipeline_metadata" in e else e.get("date")
+        if d_val == str(target_date) and e.get("actual_results") is not None:
             return True
     return False
 
