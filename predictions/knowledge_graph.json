@@ -1,0 +1,1338 @@
+{
+  "version": "1.2",
+  "last_updated": "2026-07-14T15:23:11Z",
+  "graph_metrics": {
+    "total_nodes": 90,
+    "total_edges": 99
+  },
+  "nodes": [
+    {
+      "id": "ADR-001",
+      "type": "ADR",
+      "label": "Arch Dec Record: ADR-001",
+      "status": "APPROVED",
+      "pagerank_centrality": 0.0416
+    },
+    {
+      "id": "ADR-002",
+      "type": "ADR",
+      "label": "Arch Dec Record: ADR-002",
+      "status": "APPROVED",
+      "pagerank_centrality": 0.0227
+    },
+    {
+      "id": "ADR-003",
+      "type": "ADR",
+      "label": "Arch Dec Record: ADR-003",
+      "status": "APPROVED",
+      "pagerank_centrality": 0.0023
+    },
+    {
+      "id": "RUN_PROD_1.2",
+      "type": "ProductionDecision",
+      "label": "Daily Production Engine run v1.2",
+      "status": "Active",
+      "pagerank_centrality": 0.0562
+    },
+    {
+      "id": "BELIEF_001",
+      "type": "Belief",
+      "label": "Cross-validation calibration fixes overfitting",
+      "confidence": 0.38,
+      "health_score": 0.78,
+      "health_ci_95": [
+        0.41,
+        1.0
+      ],
+      "status": "Deprecated",
+      "in_degree": 52,
+      "out_degree": 1,
+      "velocity": -0.06,
+      "acceleration": -0.03,
+      "pagerank_centrality": 0.2857
+    },
+    {
+      "id": "BELIEF_002",
+      "type": "Belief",
+      "label": "Dynamic Weight Fusion outperforms static weights",
+      "confidence": 0.48,
+      "health_score": 0.82,
+      "health_ci_95": [
+        0.44,
+        1.0
+      ],
+      "status": "Deprecated",
+      "in_degree": 20,
+      "out_degree": 1,
+      "velocity": -0.07,
+      "acceleration": -0.03,
+      "pagerank_centrality": 0.0865
+    },
+    {
+      "id": "BELIEF_003",
+      "type": "Belief",
+      "label": "Mutual Information measures nonlinear correlation better than Pearson",
+      "confidence": 0.62,
+      "health_score": 0.87,
+      "health_ci_95": [
+        0.5,
+        1.0
+      ],
+      "status": "Experimental",
+      "in_degree": 6,
+      "out_degree": 1,
+      "velocity": -0.08,
+      "acceleration": -0.05,
+      "pagerank_centrality": 0.0194
+    },
+    {
+      "id": "EV_STD_SAMPLE_0",
+      "type": "Evidence",
+      "label": "Daily XSMB draw observation t-0",
+      "status": "Immutable",
+      "pagerank_centrality": 0.0023
+    },
+    {
+      "id": "EV_STD_SAMPLE_1",
+      "type": "Evidence",
+      "label": "Daily XSMB draw observation t-1",
+      "status": "Immutable",
+      "pagerank_centrality": 0.0023
+    },
+    {
+      "id": "EV_STD_SAMPLE_2",
+      "type": "Evidence",
+      "label": "Daily XSMB draw observation t-2",
+      "status": "Immutable",
+      "pagerank_centrality": 0.0023
+    },
+    {
+      "id": "EV_STD_SAMPLE_3",
+      "type": "Evidence",
+      "label": "Daily XSMB draw observation t-3",
+      "status": "Immutable",
+      "pagerank_centrality": 0.0023
+    },
+    {
+      "id": "EV_STD_SAMPLE_4",
+      "type": "Evidence",
+      "label": "Daily XSMB draw observation t-4",
+      "status": "Immutable",
+      "pagerank_centrality": 0.0023
+    },
+    {
+      "id": "FEAT_DELAY_STD",
+      "type": "Feature",
+      "label": "delay_std",
+      "score": 97.5,
+      "lifecycle": "Production (Anchor)",
+      "pagerank_centrality": 0.0088
+    },
+    {
+      "id": "FEAT_MARKOV_ORDER2",
+      "type": "Feature",
+      "label": "markov_order2",
+      "score": 83.64,
+      "lifecycle": "Production (Anchor)",
+      "pagerank_centrality": 0.0035
+    },
+    {
+      "id": "FEAT_DELAY_MEAN",
+      "type": "Feature",
+      "label": "delay_mean",
+      "score": 81.21,
+      "lifecycle": "Production (Anchor)",
+      "pagerank_centrality": 0.0082
+    },
+    {
+      "id": "FEAT_MARKOV_ENTROPY",
+      "type": "Feature",
+      "label": "markov_entropy",
+      "score": 77.7,
+      "lifecycle": "Production (Anchor)",
+      "pagerank_centrality": 0.0035
+    },
+    {
+      "id": "FEAT_COND_PROB_YESTERDAY",
+      "type": "Feature",
+      "label": "cond_prob_yesterday",
+      "score": 74.11,
+      "lifecycle": "Volatile High Alpha",
+      "pagerank_centrality": 0.0074
+    },
+    {
+      "id": "FEAT_FREQ_ALL",
+      "type": "Feature",
+      "label": "freq_all",
+      "score": 73.17,
+      "lifecycle": "Production (Anchor)",
+      "pagerank_centrality": 0.0054
+    },
+    {
+      "id": "FEAT_FREQ_365D",
+      "type": "Feature",
+      "label": "freq_365d",
+      "score": 71.33,
+      "lifecycle": "Production (Anchor)",
+      "pagerank_centrality": 0.0054
+    },
+    {
+      "id": "FEAT_FREQ_ABOVE_EXPECTED",
+      "type": "Feature",
+      "label": "freq_above_expected",
+      "score": 70.76,
+      "lifecycle": "Production (Anchor)",
+      "pagerank_centrality": 0.0054
+    },
+    {
+      "id": "FEAT_MARKOV_STATIONARY",
+      "type": "Feature",
+      "label": "markov_stationary",
+      "score": 67.2,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0034
+    },
+    {
+      "id": "FEAT_COND_PROB_INVERTED",
+      "type": "Feature",
+      "label": "cond_prob_inverted",
+      "score": 66.08,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0076
+    },
+    {
+      "id": "FEAT_DELAY_MOMENTUM",
+      "type": "Feature",
+      "label": "delay_momentum",
+      "score": 65.74,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0078
+    },
+    {
+      "id": "FEAT_FREQ_RATIO_MID",
+      "type": "Feature",
+      "label": "freq_ratio_mid",
+      "score": 63.87,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0053
+    },
+    {
+      "id": "FEAT_MARKOV_PERSISTENCE",
+      "type": "Feature",
+      "label": "markov_persistence",
+      "score": 63.67,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0034
+    },
+    {
+      "id": "FEAT_FREQ_MOMENTUM_SHORT",
+      "type": "Feature",
+      "label": "freq_momentum_short",
+      "score": 61.01,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0053
+    },
+    {
+      "id": "FEAT_DELAY_VELOCITY",
+      "type": "Feature",
+      "label": "delay_velocity",
+      "score": 59.36,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0075
+    },
+    {
+      "id": "FEAT_MARKOV_ORDER1",
+      "type": "Feature",
+      "label": "markov_order1",
+      "score": 57.76,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0034
+    },
+    {
+      "id": "FEAT_DELAY_VOLATILITY",
+      "type": "Feature",
+      "label": "delay_volatility",
+      "score": 56.22,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0074
+    },
+    {
+      "id": "FEAT_FREQ_180D",
+      "type": "Feature",
+      "label": "freq_180d",
+      "score": 54.89,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0051
+    },
+    {
+      "id": "FEAT_FREQ_MOMENTUM_LONG",
+      "type": "Feature",
+      "label": "freq_momentum_long",
+      "score": 53.75,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0051
+    },
+    {
+      "id": "FEAT_DELAY_ACCELERATION",
+      "type": "Feature",
+      "label": "delay_acceleration",
+      "score": 53.31,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0074
+    },
+    {
+      "id": "FEAT_FREQ_MOMENTUM_ULTRA",
+      "type": "Feature",
+      "label": "freq_momentum_ultra",
+      "score": 53.09,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0051
+    },
+    {
+      "id": "FEAT_FREQ_90D",
+      "type": "Feature",
+      "label": "freq_90d",
+      "score": 52.97,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0051
+    },
+    {
+      "id": "FEAT_FREQ_RATIO_SHORT",
+      "type": "Feature",
+      "label": "freq_ratio_short",
+      "score": 52.58,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0051
+    },
+    {
+      "id": "FEAT_COND_PROB_TAIL_CAM",
+      "type": "Feature",
+      "label": "cond_prob_tail_cam",
+      "score": 51.95,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0072
+    },
+    {
+      "id": "FEAT_FREQ_KURT_30",
+      "type": "Feature",
+      "label": "freq_kurt_30",
+      "score": 51.71,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0051
+    },
+    {
+      "id": "FEAT_FREQ_SKEW_30",
+      "type": "Feature",
+      "label": "freq_skew_30",
+      "score": 51.51,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0051
+    },
+    {
+      "id": "FEAT_DIST_TO_INVERTED",
+      "type": "Feature",
+      "label": "dist_to_inverted",
+      "score": 50.98,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0071
+    },
+    {
+      "id": "FEAT_DELAY_RANK",
+      "type": "Feature",
+      "label": "delay_rank",
+      "score": 50.79,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0073
+    },
+    {
+      "id": "FEAT_DIGIT_DIFF",
+      "type": "Feature",
+      "label": "digit_diff",
+      "score": 50.59,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0071
+    },
+    {
+      "id": "FEAT_FREQ_120D",
+      "type": "Feature",
+      "label": "freq_120d",
+      "score": 49.28,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.005
+    },
+    {
+      "id": "FEAT_BAYESIAN_POSTERIOR",
+      "type": "Feature",
+      "label": "bayesian_posterior",
+      "score": 48.59,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.007
+    },
+    {
+      "id": "FEAT_FREQ_60D",
+      "type": "Feature",
+      "label": "freq_60d",
+      "score": 48.37,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.005
+    },
+    {
+      "id": "FEAT_DELAY_ZSCORE",
+      "type": "Feature",
+      "label": "delay_zscore",
+      "score": 47.8,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0072
+    },
+    {
+      "id": "FEAT_DAY_SIN",
+      "type": "Feature",
+      "label": "day_sin",
+      "score": 46.7,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.007
+    },
+    {
+      "id": "FEAT_COND_PROB_HEAD_CAM",
+      "type": "Feature",
+      "label": "cond_prob_head_cam",
+      "score": 45.87,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.007
+    },
+    {
+      "id": "FEAT_DELAY_EWMA",
+      "type": "Feature",
+      "label": "delay_ewma",
+      "score": 44.43,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0071
+    },
+    {
+      "id": "FEAT_DELAY_PERCENTILE",
+      "type": "Feature",
+      "label": "delay_percentile",
+      "score": 44.29,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0071
+    },
+    {
+      "id": "FEAT_FREQ_30D",
+      "type": "Feature",
+      "label": "freq_30d",
+      "score": 43.86,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.005
+    },
+    {
+      "id": "FEAT_TAIL_DIGIT",
+      "type": "Feature",
+      "label": "tail_digit",
+      "score": 43.61,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0069
+    },
+    {
+      "id": "FEAT_POSITION_IN_HEAD",
+      "type": "Feature",
+      "label": "position_in_head",
+      "score": 43.26,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0069
+    },
+    {
+      "id": "FEAT_DAY_OF_MONTH",
+      "type": "Feature",
+      "label": "day_of_month",
+      "score": 41.78,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0068
+    },
+    {
+      "id": "FEAT_DAY_COS",
+      "type": "Feature",
+      "label": "day_cos",
+      "score": 41.68,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0068
+    },
+    {
+      "id": "FEAT_FREQ_MEAN_30",
+      "type": "Feature",
+      "label": "freq_mean_30",
+      "score": 40.63,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0049
+    },
+    {
+      "id": "FEAT_FREQ_STD_30",
+      "type": "Feature",
+      "label": "freq_std_30",
+      "score": 40.63,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0049
+    },
+    {
+      "id": "FEAT_COND_PROB_MIRROR",
+      "type": "Feature",
+      "label": "cond_prob_mirror",
+      "score": 40.62,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0068
+    },
+    {
+      "id": "FEAT_WEEKDAY_COS",
+      "type": "Feature",
+      "label": "weekday_cos",
+      "score": 40.31,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0068
+    },
+    {
+      "id": "FEAT_WEEKDAY",
+      "type": "Feature",
+      "label": "weekday",
+      "score": 38.72,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0067
+    },
+    {
+      "id": "FEAT_FREQ_7D",
+      "type": "Feature",
+      "label": "freq_7d",
+      "score": 38.61,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0049
+    },
+    {
+      "id": "FEAT_WEEK_OF_MONTH",
+      "type": "Feature",
+      "label": "week_of_month",
+      "score": 37.67,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0067
+    },
+    {
+      "id": "FEAT_WEEKDAY_SIN",
+      "type": "Feature",
+      "label": "weekday_sin",
+      "score": 37.62,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0067
+    },
+    {
+      "id": "FEAT_FREQ_3D",
+      "type": "Feature",
+      "label": "freq_3d",
+      "score": 37.51,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0048
+    },
+    {
+      "id": "FEAT_MARKOV_RUN_LENGTH",
+      "type": "Feature",
+      "label": "markov_run_length",
+      "score": 37.46,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0032
+    },
+    {
+      "id": "FEAT_DIST_TO_100",
+      "type": "Feature",
+      "label": "dist_to_100",
+      "score": 37.16,
+      "lifecycle": "Production",
+      "pagerank_centrality": 0.0067
+    },
+    {
+      "id": "FEAT_DELAY",
+      "type": "Feature",
+      "label": "delay",
+      "score": 36.91,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0069
+    },
+    {
+      "id": "FEAT_FREQ_14D",
+      "type": "Feature",
+      "label": "freq_14d",
+      "score": 36.71,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0048
+    },
+    {
+      "id": "FEAT_DELAY_SQ",
+      "type": "Feature",
+      "label": "delay_sq",
+      "score": 36.31,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0068
+    },
+    {
+      "id": "FEAT_MONTH_COS",
+      "type": "Feature",
+      "label": "month_cos",
+      "score": 36.15,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0047
+    },
+    {
+      "id": "FEAT_DIGIT_PRODUCT",
+      "type": "Feature",
+      "label": "digit_product",
+      "score": 36.11,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0067
+    },
+    {
+      "id": "FEAT_IS_TWIN",
+      "type": "Feature",
+      "label": "is_twin",
+      "score": 36.08,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0067
+    },
+    {
+      "id": "FEAT_IS_FRIDAY",
+      "type": "Feature",
+      "label": "is_friday",
+      "score": 35.65,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0067
+    },
+    {
+      "id": "FEAT_IS_EVEN",
+      "type": "Feature",
+      "label": "is_even",
+      "score": 35.37,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_MIRROR_APPEARED_YESTERDAY",
+      "type": "Feature",
+      "label": "mirror_appeared_yesterday",
+      "score": 35.36,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_IS_WEEKEND",
+      "type": "Feature",
+      "label": "is_weekend",
+      "score": 35.21,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_INVERTED_APPEARED_YESTERDAY",
+      "type": "Feature",
+      "label": "inverted_appeared_yesterday",
+      "score": 35.09,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_HEAD_EVEN",
+      "type": "Feature",
+      "label": "head_even",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_IS_START_OF_MONTH",
+      "type": "Feature",
+      "label": "is_start_of_month",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_SAME_TAIL_COUNT",
+      "type": "Feature",
+      "label": "same_tail_count",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_TAIL_EVEN",
+      "type": "Feature",
+      "label": "tail_even",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_IS_NEAR_TET",
+      "type": "Feature",
+      "label": "is_near_tet",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_SAME_HEAD_COUNT",
+      "type": "Feature",
+      "label": "same_head_count",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_DIST_TO_MIRROR",
+      "type": "Feature",
+      "label": "dist_to_mirror",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_IS_MONDAY",
+      "type": "Feature",
+      "label": "is_monday",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_IS_END_OF_MONTH",
+      "type": "Feature",
+      "label": "is_end_of_month",
+      "score": 35.0,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0066
+    },
+    {
+      "id": "FEAT_DIGIT_SUM",
+      "type": "Feature",
+      "label": "digit_sum",
+      "score": 31.91,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0065
+    },
+    {
+      "id": "FEAT_MONTH_SIN",
+      "type": "Feature",
+      "label": "month_sin",
+      "score": 26.53,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0044
+    },
+    {
+      "id": "FEAT_HEAD_DIGIT",
+      "type": "Feature",
+      "label": "head_digit",
+      "score": 26.52,
+      "lifecycle": "Experimental",
+      "pagerank_centrality": 0.0064
+    },
+    {
+      "id": "FEAT_MONTH",
+      "type": "Feature",
+      "label": "month",
+      "score": 25.53,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0044
+    },
+    {
+      "id": "FEAT_QUARTER",
+      "type": "Feature",
+      "label": "quarter",
+      "score": 22.31,
+      "lifecycle": "Deprecated",
+      "pagerank_centrality": 0.0043
+    }
+  ],
+  "edges": [
+    {
+      "from": "ADR-001",
+      "to": "RUN_PROD_1.2",
+      "relation": "GOVERNS_DECISION"
+    },
+    {
+      "from": "ADR-002",
+      "to": "RUN_PROD_1.2",
+      "relation": "GOVERNS_DECISION"
+    },
+    {
+      "from": "ADR-003",
+      "to": "RUN_PROD_1.2",
+      "relation": "GOVERNS_DECISION"
+    },
+    {
+      "from": "BELIEF_001",
+      "to": "EXP_001",
+      "relation": "SUPPORTED_BY",
+      "support_strength": 0.85
+    },
+    {
+      "from": "BELIEF_001",
+      "to": "ADR-001",
+      "relation": "PRODUCES_ADR"
+    },
+    {
+      "from": "BELIEF_002",
+      "to": "EXP_002",
+      "relation": "SUPPORTED_BY",
+      "support_strength": 0.85
+    },
+    {
+      "from": "BELIEF_002",
+      "to": "ADR-002",
+      "relation": "PRODUCES_ADR"
+    },
+    {
+      "from": "BELIEF_003",
+      "to": "EXP_003",
+      "relation": "SUPPORTED_BY",
+      "support_strength": 0.85
+    },
+    {
+      "from": "BELIEF_003",
+      "to": "ADR-001",
+      "relation": "PRODUCES_ADR"
+    },
+    {
+      "from": "FEAT_DELAY_STD",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.9819
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_STD",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_MARKOV_ORDER2",
+      "to": "BELIEF_003",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.9175
+    },
+    {
+      "from": "FEAT_DELAY_MEAN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.8898
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_MEAN",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_MARKOV_ENTROPY",
+      "to": "BELIEF_003",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.8769
+    },
+    {
+      "from": "FEAT_COND_PROB_YESTERDAY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7906
+    },
+    {
+      "from": "FEAT_FREQ_ALL",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.852
+    },
+    {
+      "from": "FEAT_FREQ_365D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.847
+    },
+    {
+      "from": "FEAT_FREQ_ABOVE_EXPECTED",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.84
+    },
+    {
+      "from": "FEAT_MARKOV_STATIONARY",
+      "to": "BELIEF_003",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.8237
+    },
+    {
+      "from": "FEAT_COND_PROB_INVERTED",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.8265
+    },
+    {
+      "from": "FEAT_DELAY_MOMENTUM",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.8285
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_MOMENTUM",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_FREQ_RATIO_MID",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.8165
+    },
+    {
+      "from": "FEAT_MARKOV_PERSISTENCE",
+      "to": "BELIEF_003",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.815
+    },
+    {
+      "from": "FEAT_FREQ_MOMENTUM_SHORT",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.8046
+    },
+    {
+      "from": "FEAT_DELAY_VELOCITY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7931
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_VELOCITY",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_MARKOV_ORDER1",
+      "to": "BELIEF_003",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.783
+    },
+    {
+      "from": "FEAT_DELAY_VOLATILITY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7772
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_VOLATILITY",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_FREQ_180D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7681
+    },
+    {
+      "from": "FEAT_FREQ_MOMENTUM_LONG",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7668
+    },
+    {
+      "from": "FEAT_DELAY_ACCELERATION",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7633
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_ACCELERATION",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_FREQ_MOMENTUM_ULTRA",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7651
+    },
+    {
+      "from": "FEAT_FREQ_90D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7639
+    },
+    {
+      "from": "FEAT_FREQ_RATIO_SHORT",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.76
+    },
+    {
+      "from": "FEAT_COND_PROB_TAIL_CAM",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7583
+    },
+    {
+      "from": "FEAT_FREQ_KURT_30",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7581
+    },
+    {
+      "from": "FEAT_FREQ_SKEW_30",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7571
+    },
+    {
+      "from": "FEAT_DIST_TO_INVERTED",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7549
+    },
+    {
+      "from": "FEAT_DELAY_RANK",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7539
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_RANK",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_DIGIT_DIFF",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.753
+    },
+    {
+      "from": "FEAT_FREQ_120D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7449
+    },
+    {
+      "from": "FEAT_BAYESIAN_POSTERIOR",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7374
+    },
+    {
+      "from": "FEAT_FREQ_60D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7405
+    },
+    {
+      "from": "FEAT_DELAY_ZSCORE",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7389
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_ZSCORE",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_DAY_SIN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.73
+    },
+    {
+      "from": "FEAT_COND_PROB_HEAD_CAM",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7287
+    },
+    {
+      "from": "FEAT_DELAY_EWMA",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7184
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_EWMA",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_DELAY_PERCENTILE",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7215
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_PERCENTILE",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_FREQ_30D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7188
+    },
+    {
+      "from": "FEAT_TAIL_DIGIT",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7181
+    },
+    {
+      "from": "FEAT_POSITION_IN_HEAD",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7163
+    },
+    {
+      "from": "FEAT_DAY_OF_MONTH",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7048
+    },
+    {
+      "from": "FEAT_DAY_COS",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7072
+    },
+    {
+      "from": "FEAT_FREQ_MEAN_30",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7027
+    },
+    {
+      "from": "FEAT_FREQ_STD_30",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.7027
+    },
+    {
+      "from": "FEAT_COND_PROB_MIRROR",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.696
+    },
+    {
+      "from": "FEAT_WEEKDAY_COS",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.701
+    },
+    {
+      "from": "FEAT_WEEKDAY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6931
+    },
+    {
+      "from": "FEAT_FREQ_7D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.693
+    },
+    {
+      "from": "FEAT_WEEK_OF_MONTH",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6855
+    },
+    {
+      "from": "FEAT_WEEKDAY_SIN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6876
+    },
+    {
+      "from": "FEAT_FREQ_3D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6876
+    },
+    {
+      "from": "FEAT_MARKOV_RUN_LENGTH",
+      "to": "BELIEF_003",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6873
+    },
+    {
+      "from": "FEAT_DIST_TO_100",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6858
+    },
+    {
+      "from": "FEAT_DELAY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6845
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_FREQ_14D",
+      "to": "BELIEF_002",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6831
+    },
+    {
+      "from": "FEAT_DELAY_SQ",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6815
+    },
+    {
+      "from": "EV_STD_SAMPLE_0",
+      "to": "FEAT_DELAY_SQ",
+      "relation": "SUPPORTS_FEATURE",
+      "support_strength": 1.0
+    },
+    {
+      "from": "FEAT_MONTH_COS",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.3807
+    },
+    {
+      "from": "FEAT_DIGIT_PRODUCT",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6805
+    },
+    {
+      "from": "FEAT_IS_TWIN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6804
+    },
+    {
+      "from": "FEAT_IS_FRIDAY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6783
+    },
+    {
+      "from": "FEAT_IS_EVEN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6768
+    },
+    {
+      "from": "FEAT_MIRROR_APPEARED_YESTERDAY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6768
+    },
+    {
+      "from": "FEAT_IS_WEEKEND",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6759
+    },
+    {
+      "from": "FEAT_INVERTED_APPEARED_YESTERDAY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6754
+    },
+    {
+      "from": "FEAT_HEAD_EVEN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.675
+    },
+    {
+      "from": "FEAT_IS_START_OF_MONTH",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.675
+    },
+    {
+      "from": "FEAT_SAME_TAIL_COUNT",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.675
+    },
+    {
+      "from": "FEAT_TAIL_EVEN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.675
+    },
+    {
+      "from": "FEAT_IS_NEAR_TET",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.675
+    },
+    {
+      "from": "FEAT_SAME_HEAD_COUNT",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.675
+    },
+    {
+      "from": "FEAT_DIST_TO_MIRROR",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.675
+    },
+    {
+      "from": "FEAT_IS_MONDAY",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6749
+    },
+    {
+      "from": "FEAT_IS_END_OF_MONTH",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6745
+    },
+    {
+      "from": "FEAT_DIGIT_SUM",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6596
+    },
+    {
+      "from": "FEAT_MONTH_SIN",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.3327
+    },
+    {
+      "from": "FEAT_HEAD_DIGIT",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.6326
+    },
+    {
+      "from": "FEAT_MONTH",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.3277
+    },
+    {
+      "from": "FEAT_QUARTER",
+      "to": "BELIEF_001",
+      "relation": "SUPPORTS_BELIEF",
+      "support_strength": 0.3115
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "experiment_id": "EXP_001",
+  "name": "Ridge Stacking Probability Fusion",
+  "date": "2026-07-14",
+  "hypothesis": "Stacking hồi quy RidgeClassifier chéo giúp giảm thiểu ECE (Expected Calibration Error) và LogLoss so với Weighted Average Fusion.",
+  "parameters": {
+    "cv_folds": 3,
+    "method": "isotonic",
+    "base_models": 11
+  },
+  "results": {
+    "auc_roc": {
+      "weighted_fusion": 0.4960,
+      "ridge_stacking": 0.5008,
+      "status": "improved"
+    },
+    "ece_score": {
+      "weighted_fusion": 0.0147,
+      "ridge_stacking": 0.0016,
+      "status": "significantly_improved"
+    },
+    "log_loss": {
+      "weighted_fusion": 0.5524,
+      "ridge_stacking": 0.5490,
+      "status": "improved"
+    },
+    "precision_at_10": {
+      "weighted_fusion": 0.2278,
+      "ridge_stacking": 0.2156,
+      "status": "slightly_regressed"
+    }
+  },
+  "hypothesis_status": "PASS",
+  "recommendation": "Đề xuất đưa Ridge Stacking vào danh mục Production Review của kỳ cập nhật tiếp theo."
+}

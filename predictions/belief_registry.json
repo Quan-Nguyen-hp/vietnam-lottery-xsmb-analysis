@@ -1,0 +1,276 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-07-14",
+  "beliefs": {
+    "BELIEF_001": {
+      "id": "BELIEF_001",
+      "version": "1.0.0",
+      "status": "Deprecated",
+      "created_at": "2026-07-14T09:14:00Z",
+      "updated_at": "2026-07-14T10:45:24Z",
+      "owner": "Chief Architect",
+      "tags": [
+        "calibration",
+        "lgb"
+      ],
+      "title": "Cross-validation calibration fixes overfitting",
+      "hypothesis": "Sử dụng CalibratedClassifierCV (isotonic) giúp xác suất đầu ra thực tế và loại bỏ overconfidence của LightGBM.",
+      "support": [
+        "EXP_001"
+      ],
+      "contradict": [],
+      "confidence": 0.38,
+      "evidence_count": 1,
+      "health_score": 0.78,
+      "history": [
+        {
+          "timestamp": "2026-07-14T10:36:32Z",
+          "confidence": 0.7,
+          "health_score": 0.89,
+          "velocity": 0.01
+        },
+        {
+          "timestamp": "2026-07-14T10:40:26Z",
+          "confidence": 0.7,
+          "health_score": 0.89,
+          "health_ci_95": [
+            0.85,
+            0.93
+          ],
+          "velocity": 0.0,
+          "acceleration": -0.01
+        },
+        {
+          "timestamp": "2026-07-14T10:40:51Z",
+          "confidence": 0.7,
+          "health_score": 0.89,
+          "health_ci_95": [
+            0.85,
+            0.93
+          ],
+          "velocity": 0.0,
+          "acceleration": 0.0
+        },
+        {
+          "timestamp": "2026-07-14T10:42:53Z",
+          "confidence": 0.47,
+          "health_score": 0.81,
+          "health_ci_95": [
+            0.69,
+            0.93
+          ],
+          "velocity": -0.23,
+          "acceleration": -0.23
+        },
+        {
+          "timestamp": "2026-07-14T10:43:22Z",
+          "confidence": 0.44,
+          "health_score": 0.8,
+          "health_ci_95": [
+            0.68,
+            0.92
+          ],
+          "velocity": -0.03,
+          "acceleration": 0.2
+        },
+        {
+          "timestamp": "2026-07-14T10:45:24Z",
+          "confidence": 0.38,
+          "health_score": 0.78,
+          "health_ci_95": [
+            0.41,
+            1.0
+          ],
+          "velocity": -0.06,
+          "acceleration": -0.03
+        }
+      ],
+      "velocity": -0.06,
+      "health_ci_95": [
+        0.41,
+        1.0
+      ],
+      "acceleration": -0.03
+    },
+    "BELIEF_002": {
+      "id": "BELIEF_002",
+      "version": "1.0.0",
+      "status": "Deprecated",
+      "created_at": "2026-07-14T09:14:00Z",
+      "updated_at": "2026-07-14T10:45:24Z",
+      "owner": "Chief Architect",
+      "tags": [
+        "metrics",
+        "weights"
+      ],
+      "title": "Dynamic Weight Fusion outperforms static weights",
+      "hypothesis": "Tính trọng số Meta Fusion động từ Brier, LogLoss và Precision@10 giúp thích ứng tốt hơn với phong độ mô hình thành phần.",
+      "support": [
+        "EXP_002"
+      ],
+      "contradict": [],
+      "confidence": 0.48,
+      "evidence_count": 1,
+      "health_score": 0.82,
+      "history": [
+        {
+          "timestamp": "2026-07-14T10:36:32Z",
+          "confidence": 0.74,
+          "health_score": 0.91,
+          "velocity": 0.0
+        },
+        {
+          "timestamp": "2026-07-14T10:40:26Z",
+          "confidence": 0.74,
+          "health_score": 0.91,
+          "health_ci_95": [
+            0.86,
+            0.96
+          ],
+          "velocity": 0.0,
+          "acceleration": 0.0
+        },
+        {
+          "timestamp": "2026-07-14T10:40:51Z",
+          "confidence": 0.74,
+          "health_score": 0.91,
+          "health_ci_95": [
+            0.86,
+            0.96
+          ],
+          "velocity": 0.0,
+          "acceleration": 0.0
+        },
+        {
+          "timestamp": "2026-07-14T10:42:53Z",
+          "confidence": 0.59,
+          "health_score": 0.86,
+          "health_ci_95": [
+            0.69,
+            1.0
+          ],
+          "velocity": -0.15,
+          "acceleration": -0.15
+        },
+        {
+          "timestamp": "2026-07-14T10:43:22Z",
+          "confidence": 0.55,
+          "health_score": 0.84,
+          "health_ci_95": [
+            0.66,
+            1.0
+          ],
+          "velocity": -0.04,
+          "acceleration": 0.11
+        },
+        {
+          "timestamp": "2026-07-14T10:45:24Z",
+          "confidence": 0.48,
+          "health_score": 0.82,
+          "health_ci_95": [
+            0.44,
+            1.0
+          ],
+          "velocity": -0.07,
+          "acceleration": -0.03
+        }
+      ],
+      "velocity": -0.07,
+      "health_ci_95": [
+        0.44,
+        1.0
+      ],
+      "acceleration": -0.03
+    },
+    "BELIEF_003": {
+      "id": "BELIEF_003",
+      "version": "1.0.0",
+      "status": "Experimental",
+      "created_at": "2026-07-14T09:14:00Z",
+      "updated_at": "2026-07-14T10:45:24Z",
+      "owner": "Chief Architect",
+      "tags": [
+        "risk",
+        "mi"
+      ],
+      "title": "Mutual Information measures nonlinear correlation better than Pearson",
+      "hypothesis": "Ma trận NMI giúp phát hiện tương quan phi tuyến giữa các số loto nhị phân thưa tốt hơn hệ số Pearson tuyến tính.",
+      "support": [
+        "EXP_003"
+      ],
+      "contradict": [],
+      "confidence": 0.62,
+      "evidence_count": 1,
+      "health_score": 0.87,
+      "history": [
+        {
+          "timestamp": "2026-07-14T10:36:32Z",
+          "confidence": 0.79,
+          "health_score": 0.93,
+          "velocity": 0.0
+        },
+        {
+          "timestamp": "2026-07-14T10:40:26Z",
+          "confidence": 0.79,
+          "health_score": 0.93,
+          "health_ci_95": [
+            0.81,
+            1.0
+          ],
+          "velocity": 0.0,
+          "acceleration": 0.0
+        },
+        {
+          "timestamp": "2026-07-14T10:40:51Z",
+          "confidence": 0.79,
+          "health_score": 0.93,
+          "health_ci_95": [
+            0.81,
+            1.0
+          ],
+          "velocity": 0.0,
+          "acceleration": 0.0
+        },
+        {
+          "timestamp": "2026-07-14T10:42:53Z",
+          "confidence": 0.73,
+          "health_score": 0.91,
+          "health_ci_95": [
+            0.7,
+            1.0
+          ],
+          "velocity": -0.06,
+          "acceleration": -0.06
+        },
+        {
+          "timestamp": "2026-07-14T10:43:22Z",
+          "confidence": 0.7,
+          "health_score": 0.89,
+          "health_ci_95": [
+            0.67,
+            1.0
+          ],
+          "velocity": -0.03,
+          "acceleration": 0.03
+        },
+        {
+          "timestamp": "2026-07-14T10:45:24Z",
+          "confidence": 0.62,
+          "health_score": 0.87,
+          "health_ci_95": [
+            0.5,
+            1.0
+          ],
+          "velocity": -0.08,
+          "acceleration": -0.05
+        }
+      ],
+      "velocity": -0.08,
+      "health_ci_95": [
+        0.5,
+        1.0
+      ],
+      "acceleration": -0.05
+    }
+  }
+}

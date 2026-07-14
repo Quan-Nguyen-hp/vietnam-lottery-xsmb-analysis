@@ -513,21 +513,41 @@
 
         // --- 1. Tách entries có kết quả và chưa có kết quả ---
         const completed = logs.filter(e => e.actual_results !== null);
-        const pending = logs.filter(e => e.actual_results === null);
 
         // Hiển thị dự đoán mới nhất (dù là pending hay completed)
         const latest = logs[logs.length - 1];
-        document.getElementById('val-pred-date').innerText = 'Kỳ dự đoán: ' + latest.date;
-        document.getElementById('val-predicted-at').innerText = 'Tính toán lúc: ' + new Date(latest.predicted_at).toLocaleString('vi-VN');
+        const isV12 = latest.pipeline_metadata !== undefined;
+
+        const targetDate = isV12 ? latest.pipeline_metadata.date : latest.date;
+        const predTime = isV12 ? (latest.pipeline_metadata.predicted_at || latest.predicted_at) : latest.predicted_at;
+
+        document.getElementById('val-pred-date').innerText = 'Kỳ dự đoán: ' + targetDate;
+        if (predTime) {
+          document.getElementById('val-predicted-at').innerText = 'Tính toán lúc: ' + new Date(predTime).toLocaleString('vi-VN');
+        } else {
+          document.getElementById('val-predicted-at').innerText = '';
+        }
 
         const numContainer = document.getElementById('val-numbers');
         numContainer.innerHTML = '';
-        latest.ensemble_picks.forEach(num => {
-          const ball = document.createElement('span');
-          ball.className = 'number-ball';
-          ball.innerText = String(num).padStart(2, '0');
-          numContainer.appendChild(ball);
-        });
+
+        let picks = [];
+        if (isV12 && latest.bets) {
+          picks = latest.bets.map(b => b.number);
+        } else if (latest.ensemble_picks) {
+          picks = latest.ensemble_picks;
+        }
+
+        if (picks.length === 0) {
+          numContainer.innerHTML = '<span style="color: var(--accent); font-weight: 600; font-size: 1.1rem;">🚨 SKIP (Bộ lọc rủi ro từ chối cược bảo toàn vốn)</span>';
+        } else {
+          picks.forEach(num => {
+            const ball = document.createElement('span');
+            ball.className = 'number-ball';
+            ball.innerText = String(num).padStart(2, '0');
+            numContainer.appendChild(ball);
+          });
+        }
 
         // Trạng thái dự đoán mới nhất
         const statusEl = document.getElementById('val-pred-status');
@@ -536,7 +556,9 @@
         } else {
           const hits = latest.ensemble_hits || 0;
           const pnl = latest.pnl_k || 0;
-          if (hits > 0) {
+          if (picks.length === 0) {
+            statusEl.innerHTML = `<span class="pnl-badge badge-gray">🛡️ Đã SKIP an toàn (Lãi/Lỗ: 0đ)</span>`;
+          } else if (hits > 0) {
             statusEl.innerHTML = `<span class="pnl-badge pnl-plus">🎉 Trúng ${hits} nháy! Lãi ${pnl * 1000}đ</span>`;
           } else {
             statusEl.innerHTML = `<span class="pnl-badge pnl-minus">😔 Trượt! Lỗ ${Math.abs(pnl) * 1000}đ</span>`;
@@ -550,13 +572,16 @@
           let winDays = 0;
 
           completed.forEach(e => {
-            totalCost += e.cost_k || 0;
+            const entryV12 = e.pipeline_metadata !== undefined;
+            const ePicks = entryV12 ? (e.bets ? e.bets.map(b => b.number) : []) : e.ensemble_picks;
+            
+            totalCost += e.cost_k || (ePicks.length * COST_PER_BET) || 0;
             totalRev += e.revenue_k || 0;
             if ((e.ensemble_hits || 0) > 0) winDays++;
           });
 
           const totalPnl = totalRev - totalCost;
-          const roi = (totalPnl / totalCost) * 100;
+          const roi = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
           const winRate = (winDays / completed.length) * 100;
 
           // Cập nhật DOM
@@ -591,6 +616,7 @@
           const streakValEl = document.getElementById('val-streak');
           streakValEl.innerText = streak + ' ngày';
           streakValEl.style.color = streakType === 'W' ? 'var(--success)' : 'var(--danger)';
+          streakValEl.style.fontWeight = '700';
           document.getElementById('val-streak-label').innerText = 'Chuỗi ' + (streakType === 'W' ? 'thắng' : 'thua') + ' liên tiếp';
 
           // --- 3. Vẽ biểu đồ PnL ---
@@ -599,8 +625,15 @@
           const chartData = [];
 
           completed.forEach(e => {
-            cumPnl += e.pnl_k || 0;
-            chartLabels.push(e.date.substring(5)); // chỉ lấy MM-DD
+            const entryV12 = e.pipeline_metadata !== undefined;
+            const ePicks = entryV12 ? (e.bets ? e.bets.map(b => b.number) : []) : e.ensemble_picks;
+            
+            const cost = e.cost_k || (ePicks.length * COST_PER_BET) || 0;
+            const rev = e.revenue_k || 0;
+            cumPnl += (rev - cost) / 1000; // scaling to points
+            
+            const dateStr = entryV12 ? e.pipeline_metadata.date : e.date;
+            chartLabels.push(dateStr.substring(5)); // MM-DD
             chartData.push(cumPnl * 1000);
           });
 
@@ -615,17 +648,29 @@
           recentLogs.forEach(e => {
             const row = document.createElement('tr');
             
-            const picksStr = e.ensemble_picks.map(n => String(n).padStart(2, '0')).join(', ');
+            const entryV12 = e.pipeline_metadata !== undefined;
+            const dateStr = entryV12 ? e.pipeline_metadata.date : e.date;
+            
+            let ePicks = [];
+            if (entryV12 && e.bets) {
+              ePicks = e.bets.map(b => b.number);
+            } else if (e.ensemble_picks) {
+              ePicks = e.ensemble_picks;
+            }
+            
+            const picksStr = ePicks.length > 0 ? ePicks.map(n => String(n).padStart(2, '0')).join(', ') : 'SKIP (Không cược)';
             const hits = e.ensemble_hits || 0;
-            const pnl = e.pnl_k || 0;
-            const badgeClass = hits > 0 ? 'pnl-plus' : 'pnl-minus';
-            const badgeText = hits > 0 ? `Trúng ${hits} nháy` : 'Trượt';
+            const cost = e.cost_k || (ePicks.length * COST_PER_BET) || 0;
+            const pnl = e.pnl_k || ((e.revenue_k || 0) - cost);
+            
+            const badgeClass = hits > 0 ? 'pnl-plus' : (ePicks.length === 0 ? 'badge-gray' : 'pnl-minus');
+            const badgeText = hits > 0 ? `Trúng ${hits} nháy` : (ePicks.length === 0 ? 'SKIP' : 'Trượt');
             
             const uniqueActual = [...new Set(e.actual_results)].sort((a,b)=>a-b);
             const actualStr = uniqueActual.slice(0, 8).map(n => String(n).padStart(2, '0')).join(' ') + (uniqueActual.length > 8 ? '...' : '');
 
             row.innerHTML = `
-              <td>${e.date}</td>
+              <td>${dateStr}</td>
               <td style="font-weight: 500; font-family: monospace;">${picksStr}</td>
               <td><span class="pnl-badge ${badgeClass}">${badgeText}</span></td>
               <td style="font-family: monospace; font-size: 0.85rem; color: var(--text-muted);">${actualStr}</td>

@@ -1,17 +1,23 @@
 {
-  "updated_at": "2026-07-13T22:22:59.175190",
+  "updated_at": "2026-07-13T22:31:44.778064",
   "backtest_days": 180,
-  "roi_achieved": 11.018518518518519,
-  "pnl_achieved": 5355,
-  "win_rate": 94.44444444444444,
+  "roi_achieved": 11.833333333333334,
+  "pnl_achieved": 5751,
+  "win_rate": 96.66666666666667,
   "rules": {
     "delay_min": 0.31,
-    "delay_max": 0.62,
-    "poisson_min": 0.39,
-    "markov_min": 0.04,
-    "momentum_min": 0.02,
-    "repeat_min": 0.25,
-    "pairs_min": 0.17,
-    "cond_prob_min": 0.18
+    "delay_max": 0.73,
+    "poisson_min": 0.56,
+    "markov_min": 0.01,
+    "momentum_min": 0.13,
+    "repeat_min": 0.21,
+    "pairs_min": 0.14,
+    "cond_prob_min": 0.08,
+    "weight_poisson": 0.09,
+    "weight_markov": 2.11,
+    "weight_momentum": 1.93,
+    "weight_repeat": 2.15,
+    "weight_pairs": 0.32,
+    "weight_cond_prob": 1.65
   }
 }

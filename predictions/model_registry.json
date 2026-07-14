@@ -1,0 +1,99 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-07-14",
+  "models": {
+    "max_delay": {
+      "name": "max_delay",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Ước lượng tỷ lệ trễ hiện tại trên trễ lịch sử lớn nhất.",
+      "parameters": {},
+      "status": "active"
+    },
+    "conditional_probability": {
+      "name": "conditional_probability",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Bạc nhớ nâng cao dựa trên độ tương đồng mẫu xuất hiện hôm qua.",
+      "parameters": {"min_shared": 7, "top_n_days": 50},
+      "status": "active"
+    },
+    "markov_chain": {
+      "name": "markov_chain",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Dự báo xích Markov dựa trên phân phối xác suất chuyển đổi từ ngày hôm qua.",
+      "parameters": {},
+      "status": "active"
+    },
+    "frequency_momentum": {
+      "name": "frequency_momentum",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Tần suất động lượng ngắn hạn so với dài hạn để bắt chuỗi nóng.",
+      "parameters": {"window": 30},
+      "status": "active"
+    },
+    "poisson_estimator": {
+      "name": "poisson_estimator",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Ước lượng xác suất Poisson dựa trên tần suất phân bổ số lần ra và số ngày trễ.",
+      "parameters": {"window": 180},
+      "status": "active"
+    },
+    "loto_repeat": {
+      "name": "loto_repeat",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Dự đoán lô rơi lại từ kết quả hôm qua sử dụng tần suất rơi lịch sử.",
+      "parameters": {},
+      "status": "active"
+    },
+    "inverted_pairs": {
+      "name": "inverted_pairs",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Xác suất xuất hiện cặp số lộn từ số đã ra hôm qua.",
+      "parameters": {"window": 365},
+      "status": "active"
+    },
+    "day_of_week": {
+      "name": "day_of_week",
+      "type": "statistical",
+      "version": "2.0",
+      "description": "Thống kê tần suất lịch sử của các số loto theo thứ trong tuần.",
+      "parameters": {},
+      "status": "active"
+    },
+    "bayesian_predictor": {
+      "name": "bayesian_predictor",
+      "type": "statistical",
+      "version": "1.0",
+      "description": "Mô hình xác suất Naive Bayes tích hợp đa bằng chứng đầu/đuôi câm, bạc nhớ và lô lộn.",
+      "parameters": {},
+      "status": "active"
+    },
+    "ewma_probability": {
+      "name": "ewma_probability",
+      "type": "statistical",
+      "version": "1.0",
+      "description": "Tần suất EWMA đa khung thời gian có trọng số giảm dần về quá khứ.",
+      "parameters": {"multi_scale": true},
+      "status": "active"
+    },
+    "lightgbm_classifier": {
+      "name": "lightgbm_classifier",
+      "type": "machine_learning",
+      "version": "1.0",
+      "description": "Mô hình phân loại LightGBM học trực tiếp từ 78 đặc trưng của FeatureStore.",
+      "parameters": {
+        "n_estimators": 80,
+        "learning_rate": 0.05,
+        "num_leaves": 15,
+        "min_child_samples": 30
+      },
+      "status": "active"
+    }
+  }
+}

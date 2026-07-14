@@ -1,0 +1,126 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-07-14",
+  "features": {
+    "delay": {
+      "name": "delay",
+      "group": "delay",
+      "formula": "N - 1 - index_last_appearance",
+      "description": "Khoảng trễ (số ngày chưa về) hiện tại của số loto.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "delay_sq": {
+      "name": "delay_sq",
+      "group": "delay",
+      "formula": "delay ^ 2",
+      "description": "Bình phương khoảng trễ để nhấn mạnh các số cực khan.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "delay_zscore": {
+      "name": "delay_zscore",
+      "group": "delay",
+      "formula": "(delay - mean_gaps) / std_gaps",
+      "description": "Điểm Z-score đo mức độ bất thường của khoảng trễ hiện tại so với lịch sử trễ của chính nó.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "delay_percentile": {
+      "name": "delay_percentile",
+      "group": "delay",
+      "formula": "rank_delay / 100",
+      "description": "Thứ hạng phần trăm khoảng trễ của số loto này so với toàn bộ 100 số cùng ngày.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "delay_ewma": {
+      "name": "delay_ewma",
+      "group": "delay",
+      "formula": "EWMA(gaps, alpha=0.2)",
+      "description": "Trung bình trượt lũy thừa của các khoảng trễ lịch sử.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "freq_3d": {
+      "name": "freq_3d",
+      "group": "frequency",
+      "formula": "appearances_3d / 3",
+      "description": "Tần suất xuất hiện trong cửa sổ cực ngắn 3 ngày.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "freq_30d": {
+      "name": "freq_30d",
+      "group": "frequency",
+      "formula": "appearances_30d / 30",
+      "description": "Tần suất xuất hiện chuẩn trong cửa sổ 30 ngày.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "freq_365d": {
+      "name": "freq_365d",
+      "group": "frequency",
+      "formula": "appearances_365d / 365",
+      "description": "Tần suất xuất hiện dài hạn 365 ngày làm baseline.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "freq_momentum_short": {
+      "name": "freq_momentum_short",
+      "group": "frequency",
+      "formula": "freq_7d - freq_30d",
+      "description": "Động lượng tần suất ngắn hạn so với trung hạn.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "markov_order1": {
+      "name": "markov_order1",
+      "group": "markov",
+      "formula": "P(active_t | active_{t-1})",
+      "description": "Xác suất chuyển đổi Markov bậc 1 (khả năng rơi lại hoặc về tiếp).",
+      "version": "1.0",
+      "status": "active"
+    },
+    "markov_entropy": {
+      "name": "markov_entropy",
+      "group": "markov",
+      "formula": "Entropy(Transition_Matrix)",
+      "description": "Độ hỗn loạn chuyển đổi trạng thái của số loto. Giá trị thấp = tính lặp cao.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "cond_prob_yesterday": {
+      "name": "cond_prob_yesterday",
+      "group": "bayesian",
+      "formula": "Mean(P(num_t | active_yest))",
+      "description": "Xác suất bạc nhớ trung bình dựa trên danh sách các số đã về hôm qua.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "cond_prob_head_cam": {
+      "name": "cond_prob_head_cam",
+      "group": "bayesian",
+      "formula": "Mean(P(num_t | head_cam_yest))",
+      "description": "Xác suất nổ dựa trên danh sách các đầu số bị câm hôm qua.",
+      "version": "1.0",
+      "status": "active"
+    },
+    "is_twin": {
+      "name": "is_twin",
+      "group": "pair",
+      "formula": "head == tail",
+      "description": "Đặc trưng loto kép (00, 11, ..., 99).",
+      "version": "1.0",
+      "status": "active"
+    },
+    "weekday": {
+      "name": "weekday",
+      "group": "time",
+      "formula": "date.weekday()",
+      "description": "Thứ trong tuần (0: Thứ hai -> 6: Chủ nhật).",
+      "version": "1.0",
+      "status": "active"
+    }
+  }
+}

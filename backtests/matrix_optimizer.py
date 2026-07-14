@@ -50,7 +50,9 @@ def main():
     
     for step, idx in enumerate(range(start_idx, total_days)):
         S_hist = S_full[:idx]
-        matrix = predictor.build_matrix(None, S=S_hist)
+        # Chỉ copy cột date cực nhẹ để lấy thông tin thứ trong tuần mà không tốn RAM
+        history_df = df[["date"]].iloc[:idx]
+        matrix = predictor.build_matrix(history_df, S=S_hist)
         cache_matrices.append(matrix)
         
         actual_row = df.iloc[idx]
@@ -84,6 +86,7 @@ def main():
                 if f["repeat"] < rules["repeat_min"]: continue
                 if f["pairs"] < rules["pairs_min"]: continue
                 if f["cond_prob"] < rules["cond_prob_min"]: continue
+                if f["day_of_week"] < rules["day_of_week_min"]: continue
                 candidates.append(num)
                 
             # Thuật toán nới lỏng động nhanh
@@ -93,7 +96,7 @@ def main():
                 iter_count += 1
                 curr_rules["delay_min"] = max(0.0, curr_rules["delay_min"] - 0.1)
                 curr_rules["delay_max"] = min(1.0, curr_rules["delay_max"] + 0.1)
-                for k in ["poisson_min", "markov_min", "momentum_min", "repeat_min", "pairs_min", "cond_prob_min"]:
+                for k in ["poisson_min", "markov_min", "momentum_min", "repeat_min", "pairs_min", "cond_prob_min", "day_of_week_min"]:
                     curr_rules[k] = max(0.0, curr_rules[k] - 0.1)
                 
                 candidates = []
@@ -107,15 +110,21 @@ def main():
                     if f["repeat"] < curr_rules["repeat_min"]: continue
                     if f["pairs"] < curr_rules["pairs_min"]: continue
                     if f["cond_prob"] < curr_rules["cond_prob_min"]: continue
+                    if f["day_of_week"] < curr_rules["day_of_week_min"]: continue
                     candidates.append(num)
 
             # Sắp xếp và chọn top_k
-            def get_avg_score(n):
-                return np.mean(list(matrix[n].values()))
+            def get_weighted_score(n):
+                f = matrix[n]
+                score = 0.0
+                for k in ["poisson", "markov", "momentum", "repeat", "pairs", "cond_prob", "day_of_week"]:
+                    w = rules.get(f"weight_{k}", 1.0)
+                    score += f[k] * w
+                return score
                 
-            sorted_cand = sorted(candidates, key=get_avg_score, reverse=True)
+            sorted_cand = sorted(candidates, key=get_weighted_score, reverse=True)
             if len(sorted_cand) < TOP_K:
-                all_sorted = sorted(list(range(100)), key=get_avg_score, reverse=True)
+                all_sorted = sorted(list(range(100)), key=get_weighted_score, reverse=True)
                 for num in all_sorted:
                     if num not in sorted_cand:
                         sorted_cand.append(num)
@@ -153,13 +162,22 @@ def main():
         "repeat_min"    : 0.0,
         "pairs_min"     : 0.0,
         "cond_prob_min" : 0.0,
+        "day_of_week_min": 0.0,
+        
+        "weight_poisson"  : 1.0,
+        "weight_markov"   : 1.0,
+        "weight_momentum" : 1.0,
+        "weight_repeat"   : 1.0,
+        "weight_pairs"    : 1.0,
+        "weight_cond_prob": 1.0,
+        "weight_day_of_week": 1.0,
     }
     best_roi, best_pnl, best_wr = evaluate_rules(default_rules)
     best_rules = default_rules
     print(f"🟢 Baseline ROI (Default): {best_roi:+.2f}% | Lãi ròng: {best_pnl*1000:+,}đ")
 
     for i in range(N_ITERATIONS):
-        # Generate random thresholds
+        # Generate random thresholds and weights
         d_min = round(random.uniform(0.0, 0.4), 2)
         d_max = round(random.uniform(0.6, 1.0), 2)
         
@@ -172,6 +190,16 @@ def main():
             "repeat_min"    : round(random.uniform(0.0, 0.4), 2),
             "pairs_min"     : round(random.uniform(0.0, 0.4), 2),
             "cond_prob_min" : round(random.uniform(0.0, 0.3), 2),
+            "day_of_week_min": round(random.uniform(0.0, 0.4), 2),
+            
+            # Trọng số ngẫu nhiên từ 0.0 đến 3.0
+            "weight_poisson"  : round(random.uniform(0.0, 3.0), 2),
+            "weight_markov"   : round(random.uniform(0.0, 3.0), 2),
+            "weight_momentum" : round(random.uniform(0.0, 3.0), 2),
+            "weight_repeat"   : round(random.uniform(0.0, 3.0), 2),
+            "weight_pairs"    : round(random.uniform(0.0, 3.0), 2),
+            "weight_cond_prob": round(random.uniform(0.0, 3.0), 2),
+            "weight_day_of_week": round(random.uniform(0.0, 3.0), 2),
         }
         
         roi, pnl, wr = evaluate_rules(trial)

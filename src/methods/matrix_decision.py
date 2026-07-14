@@ -11,6 +11,7 @@ from .frequency_momentum import FrequencyMomentumPredictor
 from .poisson_estimator import PoissonEstimatorPredictor
 from .loto_repeat import LotoRepeatPredictor
 from .inverted_pairs import InvertedPairsPredictor
+from .day_of_week import DayOfWeekPredictor
 
 class MatrixDecisionPredictor(BasePredictor):
     def __init__(self, rules_path: str = None):
@@ -23,6 +24,7 @@ class MatrixDecisionPredictor(BasePredictor):
             "poisson": PoissonEstimatorPredictor(window_size=180),
             "repeat": LotoRepeatPredictor(),
             "pairs": InvertedPairsPredictor(),
+            "day_of_week": DayOfWeekPredictor(),
         }
         
         # Thiết lập luật lọc mặc định (sẽ được ghi đè bằng file cấu hình tối ưu)
@@ -35,6 +37,16 @@ class MatrixDecisionPredictor(BasePredictor):
             "repeat_min"    : 0.0,
             "pairs_min"     : 0.0,
             "cond_prob_min" : 0.0,
+            "day_of_week_min": 0.0,
+            
+            # Trọng số sắp xếp mặc định
+            "weight_poisson"  : 1.0,
+            "weight_markov"   : 1.0,
+            "weight_momentum" : 1.0,
+            "weight_repeat"   : 1.0,
+            "weight_pairs"    : 1.0,
+            "weight_cond_prob": 1.0,
+            "weight_day_of_week": 1.0,
         }
         
         if rules_path:
@@ -97,6 +109,7 @@ class MatrixDecisionPredictor(BasePredictor):
             if f["repeat"] < r["repeat_min"]: return False
             if f["pairs"] < r["pairs_min"]: return False
             if f["cond_prob"] < r["cond_prob_min"]: return False
+            if f["day_of_week"] < r["day_of_week_min"]: return False
             return True
 
         # 3. Lọc các số đạt chuẩn
@@ -113,21 +126,25 @@ class MatrixDecisionPredictor(BasePredictor):
             # Nới lỏng 15% mỗi vòng lặp
             current_rules["delay_min"] = max(0.0, current_rules["delay_min"] - 0.05)
             current_rules["delay_max"] = min(1.0, current_rules["delay_max"] + 0.05)
-            for k in ["poisson_min", "markov_min", "momentum_min", "repeat_min", "pairs_min", "cond_prob_min"]:
+            for k in ["poisson_min", "markov_min", "momentum_min", "repeat_min", "pairs_min", "cond_prob_min", "day_of_week_min"]:
                 current_rules[k] = max(0.0, current_rules[k] - 0.05)
             
             candidates = [num for num in range(100) if check_rules(num, current_rules)]
 
-        # 5. Sắp xếp các ứng viên dựa trên điểm trung bình của tất cả đặc trưng
-        def get_avg_score(num: int) -> float:
+        # 5. Sắp xếp các ứng viên dựa trên tổng điểm có trọng số
+        def get_weighted_score(num: int) -> float:
             f = matrix[num]
-            return float(np.mean(list(f.values())))
+            score = 0.0
+            for k in ["poisson", "markov", "momentum", "repeat", "pairs", "cond_prob", "day_of_week"]:
+                w = self.rules.get(f"weight_{k}", 1.0)
+                score += f[k] * w
+            return score
 
-        sorted_candidates = sorted(candidates, key=get_avg_score, reverse=True)
+        sorted_candidates = sorted(candidates, key=get_weighted_score, reverse=True)
         
-        # Nếu vẫn thiếu (rất hiếm), bù đắp bằng các số có điểm trung bình cao nhất
+        # Nếu vẫn thiếu (rất hiếm), bù đắp bằng các số có điểm cao nhất
         if len(sorted_candidates) < top_k:
-            all_sorted = sorted(list(range(100)), key=get_avg_score, reverse=True)
+            all_sorted = sorted(list(range(100)), key=get_weighted_score, reverse=True)
             for num in all_sorted:
                 if num not in sorted_candidates:
                     sorted_candidates.append(num)
