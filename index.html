@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XSMB Adaptive Prediction Dashboard</title>
+  <title>Bảng Điều Hành Dự Đoán Thích Ứng XSMB</title>
   <meta name="description" content="Hệ thống dự đoán thích ứng XSMB tự động cập nhật kết quả và tối ưu hóa trọng số.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -359,12 +359,12 @@
     <!-- Header -->
     <header>
       <div>
-        <h1>XSMB Adaptive Predict</h1>
+        <h1>Dự Đoán Thích Ứng XSMB</h1>
         <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">Hệ thống đồng thuận Ensemble tự động cập nhật & tối ưu hóa</p>
       </div>
       <div class="status-badge">
         <div class="status-dot"></div>
-        <span>GitHub Action Live</span>
+        <span>Bộ Chạy Tự Động Live</span>
       </div>
     </header>
 
@@ -411,6 +411,17 @@
             </div>
             <div class="pred-detail" id="val-pred-status">
               Đang tải dữ liệu dự đoán từ GitHub...
+            </div>
+            <div id="val-raw-candidates" style="margin-top: 1.5rem; padding-top: 1.2rem; border-top: 1px dashed var(--border-color); width: 100%; display: none;">
+              <div id="val-raw-title" style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.8rem;">
+                🔮 CÁC SỐ XÁC SUẤT THÔ CAO NHẤT (BỊ CHẶN BỞI BỘ LỌC)
+              </div>
+              <div class="numbers-container" id="val-raw-numbers" style="gap: 1.5rem; margin-bottom: 0.8rem; justify-content: center; flex-wrap: wrap;">
+                <!-- Raw numbers balls -->
+              </div>
+              <div style="font-size: 0.85rem; color: var(--danger); font-weight: 500; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.8rem; border-radius: 12px; line-height: 1.4;">
+                ⚠️ CẢNH BÁO: Các số trên có xác suất cao nhất từ mô hình tổ hợp nhưng KHÔNG vượt qua được bộ lọc quản trị rủi ro Kelly hoặc điểm đồng thuận tin cậy. Chỉ hiển thị phục vụ mục đích kiểm chứng học thuật, <strong>TUYỆT ĐỐI KHÔNG ĐI VỐN</strong>.
+              </div>
             </div>
           </div>
         </div>
@@ -563,6 +574,52 @@
           } else {
             statusEl.innerHTML = `<span class="pnl-badge pnl-minus">😔 Trượt! Lỗ ${Math.abs(pnl) * 1000}đ</span>`;
           }
+        }
+
+        // --- 1.2 Hiển thị các số chưa qua bộ lọc rủi ro ---
+        const rawContainer = document.getElementById('val-raw-candidates');
+        const rawNumContainer = document.getElementById('val-raw-numbers');
+        const rawTitleEl = document.getElementById('val-raw-title');
+
+        if (latest.ensemble_proba) {
+          const rawCandidates = latest.ensemble_proba
+            .map((p, idx) => ({ number: idx, proba: p }))
+            .sort((a, b) => b.proba - a.proba)
+            .slice(0, 4);
+
+          rawNumContainer.innerHTML = '';
+          rawCandidates.forEach(cand => {
+            const ballWrapper = document.createElement('div');
+            ballWrapper.style.display = 'flex';
+            ballWrapper.style.flexDirection = 'column';
+            ballWrapper.style.alignItems = 'center';
+            ballWrapper.style.gap = '0.3rem';
+
+            const ball = document.createElement('span');
+            ball.className = 'number-ball';
+            ball.style.background = 'radial-gradient(circle at 30% 30%, #f87171 0%, #b91c1c 100%)';
+            ball.style.boxShadow = '0 6px 12px rgba(185, 28, 28, 0.2)';
+            ball.innerText = String(cand.number).padStart(2, '0');
+
+            const probText = document.createElement('span');
+            probText.style.fontSize = '0.8rem';
+            probText.style.color = 'var(--text-muted)';
+            probText.style.fontWeight = '600';
+            probText.innerText = (cand.proba * 100).toFixed(2) + '%';
+
+            ballWrapper.appendChild(ball);
+            ballWrapper.appendChild(probText);
+            rawNumContainer.appendChild(ballWrapper);
+          });
+
+          rawContainer.style.display = 'block';
+          if (picks.length === 0) {
+            rawTitleEl.innerText = '🔮 CÁC SỐ XÁC SUẤT THÔ CAO NHẤT (BỊ BỘ LỌC CHẶN)';
+          } else {
+            rawTitleEl.innerText = '🔮 ỨNG VIÊN XÁC SUẤT THÔ (THAM KHẢO THÊM)';
+          }
+        } else {
+          rawContainer.style.display = 'none';
         }
 
         // --- 2. Tính toán thống kê ---
