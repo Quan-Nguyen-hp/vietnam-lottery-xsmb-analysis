@@ -392,6 +392,21 @@
       </div>
     </div>
 
+    <!-- Locked holdout status -->
+    <div class="card-main" style="margin-top: 1.5rem;">
+      <div class="card-title">
+        <span>🔒 Trạng thái holdout</span>
+        <span id="holdout-status-badge" class="status-badge" style="font-size: 0.75rem; padding: 0.35rem 0.7rem;">Đang tải...</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.8rem; color: var(--text-muted); font-size: 0.9rem;">
+        <div>Holdout bắt đầu: <strong id="holdout-start" style="color: var(--text-main);">—</strong></div>
+        <div>Yêu cầu: <strong id="holdout-required" style="color: var(--text-main);">—</strong></div>
+        <div>Dữ liệu hợp lệ hiện có: <strong id="holdout-days" style="color: var(--text-main);">—</strong></div>
+        <div>Prediction log hợp lệ: <strong id="holdout-logs" style="color: var(--text-main);">—</strong></div>
+      </div>
+      <div id="holdout-warning" style="margin-top: 0.8rem; color: var(--accent); font-size: 0.82rem;"></div>
+    </div>
+
     <!-- Main Content Layout -->
     <div class="main-grid">
       <!-- Left side: Today's Prediction & History chart -->
@@ -420,7 +435,7 @@
                 <!-- Raw numbers balls -->
               </div>
               <div style="font-size: 0.85rem; color: var(--danger); font-weight: 500; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.8rem; border-radius: 12px; line-height: 1.4;">
-                ⚠️ CẢNH BÁO: Các số trên có xác suất cao nhất từ mô hình tổ hợp nhưng KHÔNG vượt qua được bộ lọc quản trị rủi ro Kelly hoặc điểm đồng thuận tin cậy. Chỉ hiển thị phục vụ mục đích kiểm chứng học thuật, <strong>TUYỆT ĐỐI KHÔNG ĐI VỐN</strong>.
+                ⚠️ CẢNH BÁO: Hệ thống đang ở chế độ paper-trade và Edge Gate chưa chứng minh được lợi thế thống kê. Các số chỉ phục vụ kiểm chứng học thuật, <strong>KHÔNG PHẢI KHUYẾN NGHỊ ĐẶT TIỀN THẬT</strong>.
               </div>
             </div>
           </div>
@@ -483,7 +498,7 @@
             </div>
             <div style="display: flex; justify-content: space-between;">
               <span>Số lượng số tối ưu (top_k):</span>
-              <strong style="color: var(--text-main);">10 số / ngày</strong>
+                <strong id="val-top-k" style="color: var(--text-main);">— số / ngày</strong>
             </div>
             <div style="display: flex; justify-content: space-between;">
               <span>Tần suất điều chỉnh:</span>
@@ -499,14 +514,44 @@
 
   <script>
     // Config path
-    const LOG_URL = './predictions/prediction_log.json';
-    const WEIGHTS_URL = './predictions/matrix_rules.json';
+    const DATA_VERSION = '20260719-topk2';
+    const LOG_URL = `./predictions/prediction_log.json?v=${DATA_VERSION}`;
+    const WEIGHTS_URL = `./predictions/matrix_rules.json?v=${DATA_VERSION}`;
+    const HOLDOUT_URL = `./backtests/results/locked_holdout_status.json?v=${DATA_VERSION}`;
+    const POLICY_URL = `./predictions/evaluation_policy.json?v=${DATA_VERSION}`;
+
+    function renderHoldoutStatus(data) {
+      if (!data) {
+        document.getElementById('holdout-status-badge').textContent = 'Chưa có dữ liệu';
+        document.getElementById('holdout-warning').textContent = 'Chưa tải được trạng thái holdout.';
+        return;
+      }
+      const badge = document.getElementById('holdout-status-badge');
+      badge.textContent = data.ready ? 'SẴN SÀNG' : 'ĐANG CHỜ DỮ LIỆU';
+      badge.style.color = data.ready ? 'var(--success)' : 'var(--accent)';
+      document.getElementById('holdout-start').textContent = data.start_date || '—';
+      document.getElementById('holdout-required').textContent = `${data.minimum_days || 0} ngày`;
+      document.getElementById('holdout-days').textContent = `${data.available_days || 0}/${data.minimum_days || 0} ngày`;
+      document.getElementById('holdout-logs').textContent = `${data.completed_holdout_log_entries || 0}`;
+      if (data.pre_holdout_log_entries && data.pre_holdout_log_entries.length) {
+        document.getElementById('holdout-warning').textContent =
+          `⚠️ ${data.pre_holdout_log_entries.length} log trước ngày holdout đã được loại khỏi đánh giá.`;
+      } else if (data.fallback) {
+        document.getElementById('holdout-warning').textContent =
+          '⚠️ Chưa tải được file trạng thái holdout; đang hiển thị giá trị khóa an toàn. Hãy redeploy artifact.';
+      } else {
+        document.getElementById('holdout-warning').textContent =
+          'Chỉ dữ liệu từ ngày bắt đầu holdout mới được dùng cho đánh giá cuối.';
+      }
+    }
 
     async function loadDashboard() {
       try {
-        const [logRes, weightsRes] = await Promise.all([
+        const [logRes, weightsRes, holdoutRes, policyRes] = await Promise.all([
           fetch(LOG_URL).catch(() => null),
-          fetch(WEIGHTS_URL).catch(() => null)
+          fetch(WEIGHTS_URL).catch(() => null),
+          fetch(HOLDOUT_URL).catch(() => null),
+          fetch(POLICY_URL).catch(() => null)
         ]);
 
         if (!logRes || logRes.status !== 200) {
@@ -516,6 +561,24 @@
 
         const logs = await logRes.json();
         const weightsData = weightsRes ? await weightsRes.json() : null;
+        const holdoutData = holdoutRes && holdoutRes.status === 200
+          ? await holdoutRes.json()
+          : {
+              start_date: '2026-07-21',
+              minimum_days: 180,
+              available_days: 0,
+              completed_holdout_log_entries: 0,
+              ready: false,
+              pre_holdout_log_entries: [],
+              fallback: true
+            };
+        const policyData = policyRes && policyRes.status === 200 ? await policyRes.json() : null;
+        renderHoldoutStatus(holdoutData);
+        const configuredTopK = policyData && policyData.decision_policy
+          ? policyData.decision_policy.top_k
+          : 2;
+        document.getElementById('val-top-k').textContent =
+          `${configuredTopK === null ? '—' : configuredTopK} số / ngày`;
 
         if (logs.length === 0) {
           document.getElementById('val-pred-status').innerText = 'Chưa có lượt dự đoán nào được lưu trữ.';
@@ -523,7 +586,9 @@
         }
 
         // --- 1. Tách entries có kết quả và chưa có kết quả ---
-        const completed = logs.filter(e => e.actual_results !== null);
+        // Chỉ entry có mảng actual_results mới là ngày đã chấm kết quả.
+        // Log v1.2 đang chờ kết quả thường không có field này hoặc có null.
+        const completed = logs.filter(e => Array.isArray(e.actual_results));
 
         // Hiển thị dự đoán mới nhất (dù là pending hay completed)
         const latest = logs[logs.length - 1];
@@ -550,7 +615,7 @@
         }
 
         if (picks.length === 0) {
-          numContainer.innerHTML = '<span style="color: var(--accent); font-weight: 600; font-size: 1.1rem;">🚨 SKIP (Bộ lọc rủi ro từ chối cược bảo toàn vốn)</span>';
+          numContainer.innerHTML = '<span style="color: var(--accent); font-weight: 700; font-size: 1.1rem;">🚨 SKIP — KHÔNG CÓ SỐ NÀO ĐƯỢC KHUYẾN NGHỊ</span>';
         } else {
           picks.forEach(num => {
             const ball = document.createElement('span');
@@ -562,7 +627,7 @@
 
         // Trạng thái dự đoán mới nhất
         const statusEl = document.getElementById('val-pred-status');
-        if (latest.actual_results === null) {
+        if (!Array.isArray(latest.actual_results)) {
           statusEl.innerHTML = `<span class="pnl-badge badge-gray">⏳ Đang chờ kết quả mở thưởng (lúc 18:15)</span>`;
         } else {
           const hits = latest.ensemble_hits || 0;
@@ -581,11 +646,11 @@
         const rawNumContainer = document.getElementById('val-raw-numbers');
         const rawTitleEl = document.getElementById('val-raw-title');
 
-        if (latest.ensemble_proba) {
-          const rawCandidates = latest.ensemble_proba
-            .map((p, idx) => ({ number: idx, proba: p }))
-            .sort((a, b) => b.proba - a.proba)
-            .slice(0, 4);
+        if (latest.ensemble_proba && picks.length > 0) {
+          const rawCandidates = picks.map(number => ({
+            number,
+            proba: latest.ensemble_proba[number]
+          }));
 
           rawNumContainer.innerHTML = '';
           rawCandidates.forEach(cand => {
@@ -613,11 +678,7 @@
           });
 
           rawContainer.style.display = 'block';
-          if (picks.length === 0) {
-            rawTitleEl.innerText = '🔮 CÁC SỐ XÁC SUẤT THÔ CAO NHẤT (BỊ BỘ LỌC CHẶN)';
-          } else {
-            rawTitleEl.innerText = '🔮 ỨNG VIÊN XÁC SUẤT THÔ (THAM KHẢO THÊM)';
-          }
+          rawTitleEl.innerText = '🔮 XÁC SUẤT MÔ HÌNH CỦA CÁC SỐ ĐÃ ĐƯỢC CHỌN';
         } else {
           rawContainer.style.display = 'none';
         }

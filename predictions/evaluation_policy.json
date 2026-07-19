@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.1",
+  "mode": "paper_trade",
+  "policy_locked_at": "2026-07-19",
+  "locked_holdout": {
+    "start_date": "2026-07-21",
+    "minimum_days": 180,
+    "purpose": "Final out-of-sample evaluation under Kelly sizing-only and top_k=2 policy. Do not tune models, thresholds, or top_k using this window.",
+    "reset_reason": "Production top_k changed from 4 to 2 after pre-holdout ablation; prior observations and the 2026-07-20 forecast are not comparable."
+  },
+  "decision_policy": {
+    "top_k": 2,
+    "min_probability": 0.31,
+    "min_confidence": 0.45,
+    "min_diversification": 0.85,
+    "kelly_selects_bets": false,
+    "kelly_role": "sizing_only"
+  },
+  "component_calibration": {
+    "production_mode": "lightgbm_only",
+    "calibrate_all_models": false,
+    "research_status": "REJECTED",
+    "reason": "All-component calibration produced zero exposure and worse Top-4 ranking on the 365-day walk-forward benchmark."
+  },
+  "constrained_stacking": {
+    "production_enabled": false,
+    "research_status": "REJECTED",
+    "reason": "On the 730-day walk-forward benchmark, stacking matched uniform fusion on Top-4 hits and ranking ROI, with CI95 including zero and permutation p=0.2993.",
+    "source_report": "backtests/results/xpis_backtest_constrained_stacking_2y.md"
+  },
+  "uniform_fusion": {
+    "production_enabled": false,
+    "research_status": "REJECTED",
+    "reason": "On the same 730-day walk-forward window, uniform fusion increased exposure from 460 to 1766 bets and reduced policy ROI from -5.14% to -8.02%. Its Top-4 ranking was better, so only a separately gated ranking challenger remains eligible for research.",
+    "source_report": "backtests/results/xpis_backtest_uniform_fusion_2y.md",
+    "champion_comparison_report": "backtests/results/xpis_backtest_metafusion_2y.md"
+  },
+  "gated_uniform_ranking": {
+    "production_enabled": false,
+    "research_status": "REJECTED",
+    "reason": "With identical daily exposure to MetaFusion on the 730-day walk-forward, ROI was -11.52% versus -5.14%. Paired delta was -6.38%, CI95 [-23.06%, +10.27%], P(delta>0)=21.1%.",
+    "source_report": "backtests/results/xpis_backtest_gated_uniform_ranking_2y.md"
+  },
+  "top_k_one_challenger": {
+    "production_enabled": false,
+    "research_status": "PROMISING_NOT_SIGNIFICANT",
+    "reason": "On the 730-day walk-forward, gated Top-1 ROI was +3.12% with CI95 [-15.47%, +22.91%] and permutation p=0.4941. Ranking-only Top-1 ROI was +3.47% with CI95 [-10.09%, +17.53%]. Holdout policy remains locked at top_k=4.",
+    "source_report": "backtests/results/xpis_backtest_metafusion_top1_2y.md"
+  },
+  "top_k_sweep_2_3": {
+    "production_enabled": false,
+    "research_status": "REJECTED_FOR_NOW",
+    "results": {
+      "top_2": {"roi": -0.0211, "roi_lower_95": -0.1824, "roi_upper_95": 0.1479, "permutation_p_value": 0.6961},
+      "top_3": {"roi": -0.0494, "roi_lower_95": -0.2072, "roi_upper_95": 0.1159, "permutation_p_value": 0.7972}
+    },
+    "reason": "Top-2 and Top-3 did not outperform Top-1 and neither had a positive lower bootstrap bound. Production remains locked at top_k=4 until a pre-registered holdout comparison is available.",
+    "source_reports": [
+      "backtests/results/xpis_backtest_metafusion_top2_2y.md",
+      "backtests/results/xpis_backtest_metafusion_top3_2y.md"
+    ]
+  },
+  "top_k_policy_change": {
+    "effective_date": "2026-07-21",
+    "from": 4,
+    "to": 2,
+    "evidence_note": "Top-2 and Top-4 had nearly identical betting days; Top-2 reduced exposure and had less negative exploratory ROI. This is an operational risk-cap change, not an Edge Gate promotion.",
+    "edge_gate_override": false
+  },
+  "promotion_gate": {
+    "required": "bootstrap_roi_lower_95_gt_zero",
+    "on_failure": "paper_trade"
+  },
+  "target_semantics": {
+    "binary_probability_target": "P(number appears at least once)",
+    "economic_target": "expected hit count per number per day",
+    "break_even_expected_count": 0.2727272727,
+    "expected_value_formula": "99 * E[count] - 27",
+    "rule": "Never use binary probability as expected hit count."
+  },
+  "count_model_challenger": {
+    "status": "shadow_paper_trade",
+    "name": "ewma_hl90_lcb",
+    "decision_enabled": false,
+    "shadow_logging_enabled": true,
+    "prospective_start_date": "2026-07-20",
+    "three_year_roi": 0.1059,
+    "three_year_roi_lower_95": 0.0021,
+    "permutation_p_value": 0.2028,
+    "promotion_blocked_reason": "Permutation test not significant, yearly CIs include zero, and candidate was selected after multiple comparisons.",
+    "source_report": "backtests/results/count_expectation_research_3y.md"
+  },
+  "edge_gate": {
+    "status": "FAIL",
+    "roi_lower_95": -1.0,
+    "roi": -0.3125,
+    "n_days": 365,
+    "total_bets": 16,
+    "total_hits": 3,
+    "last_evaluated": "2026-07-19T00:00:00Z",
+    "evaluation_period": "2025-07-12 to 2026-07-15",
+    "required": "bootstrap_roi_lower_95_gt_zero",
+    "source_report": "backtests/results/xpis_backtest_no_leakage_365d.md"
+  },
+  "kelly_policy": {
+    "declared": false,
+    "starting_capital_points": null,
+    "point_value_vnd": null,
+    "currency": "VND"
+  },
+  "pruned_models": {
+    "removed": [],
+    "candidates": ["loto_repeat"],
+    "reason": "Candidate only: paired bootstrap CI95 for Pruned-fixed minus Full still includes zero; no production pruning.",
+    "last_ablation": "2026-07-19"
+  }
+}

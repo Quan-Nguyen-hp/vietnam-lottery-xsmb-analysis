@@ -32,6 +32,9 @@ jobs:
       - name: Run auto_runner (predict or update based on time)
         run: uv run auto_runner.py
 
+      - name: Update locked holdout status
+        run: uv run backtests/holdout_status.py
+
       - name: Commit changes
         run: |
           if git diff --quiet && git diff --staged --quiet; then
@@ -43,5 +46,7 @@ jobs:
           git config --global user.name "GitHub Action"
           git add predictions/prediction_log.json
           git add predictions/adaptive_weights.json
+          git add backtests/results/locked_holdout_status.json
+          git add backtests/results/locked_holdout_status.md
           git commit -m "auto: predict/update $(date +'%Y-%m-%d %H:%M UTC')"
           git push origin main

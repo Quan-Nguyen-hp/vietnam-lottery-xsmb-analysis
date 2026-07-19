@@ -123,7 +123,7 @@ def compute_ece(probs: np.ndarray, labels: np.ndarray, n_bins: int = 10) -> floa
     return float(ece)
 
 
-def run_predict(target_date: date, top_k: int = 4) -> dict:
+def run_predict(target_date: date, top_k: int = 2) -> dict:
     target_date_str = str(target_date)
 
     # Đọc log lịch sử để lấy trọng số ngày hôm trước phục vụ EMA smoothing
@@ -411,7 +411,7 @@ def print_prediction(entry: dict) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Dự đoán XSMB hằng ngày XPIS v1.2 APPROVED")
     parser.add_argument("--date", type=str, default=None, help="Ngày dự đoán (YYYY-MM-DD), mặc định là hôm nay")
-    parser.add_argument("--top-k", type=int, default=4, help="Số lượng số tối đa chọn (mặc định 4)")
+    parser.add_argument("--top-k", type=int, default=2, help="Số lượng số tối đa chọn (mặc định 2)")
     parser.add_argument("--dry-run", action="store_true", help="Chỉ in, không lưu log")
     parser.add_argument("--no-fetch", action="store_true", help="Bỏ qua bước fetch dữ liệu mới")
     args = parser.parse_args()
