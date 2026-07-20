@@ -21,9 +21,15 @@ class EvaluationMetrics:
     Tính toán các chỉ số kiểm định chất lượng dự báo và lợi nhuận tài chính.
     """
 
-    def __init__(self, odds: float = 3.666, cost_per_bet: float = 27.0):
+    def __init__(
+        self,
+        odds: float = 3.666,
+        cost_per_bet: float = 27.0,
+        payout_per_hit: float | None = None,
+    ):
         self._odds = odds
         self._cost = cost_per_bet
+        self._payout = payout_per_hit if payout_per_hit is not None else odds * cost_per_bet
 
     def roi(self, results: pd.DataFrame) -> float:
         """Tính ROI thực tế."""
@@ -38,6 +44,56 @@ class EvaluationMetrics:
     def brier_score(self, proba_all: np.ndarray, y_all: np.ndarray) -> float:
         """Độ lệch bình phương trung bình (Brier Score) — càng thấp càng tốt."""
         return float(np.mean((proba_all - y_all) ** 2))
+
+    @property
+    def break_even_expected_count(self) -> float:
+        """Số nháy kỳ vọng tối thiểu để hòa vốn cho một số cược."""
+        return float(self._cost / self._payout)
+
+    def expected_value_per_bet(self, expected_count: np.ndarray | float) -> np.ndarray:
+        """EV theo đúng cơ chế trả thưởng nhiều nháy: payout * E[count] - cost."""
+        return self._payout * np.asarray(expected_count, dtype=float) - self._cost
+
+    def count_forecast_metrics(
+        self,
+        expected_counts: np.ndarray,
+        observed_counts: np.ndarray,
+        n_bins: int = 10,
+    ) -> dict:
+        """Đánh giá dự báo số nháy; không dùng xác suất nhị phân thay cho count."""
+        mu = np.asarray(expected_counts, dtype=float).reshape(-1)
+        y = np.asarray(observed_counts, dtype=float).reshape(-1)
+        if mu.shape != y.shape:
+            raise ValueError("expected_counts và observed_counts phải có cùng shape")
+        if len(mu) == 0:
+            return {}
+
+        mu_safe = np.clip(mu, 1e-9, None)
+        y_log_ratio = np.zeros_like(y)
+        positive = y > 0
+        y_log_ratio[positive] = y[positive] * np.log(y[positive] / mu_safe[positive])
+        poisson_deviance = 2.0 * np.mean(y_log_ratio - (y - mu_safe))
+
+        # Calibration theo quantile của E[count], tránh bin rỗng khi dự báo tập trung quanh 0.27.
+        edges = np.unique(np.quantile(mu, np.linspace(0.0, 1.0, n_bins + 1)))
+        calibration_error = 0.0
+        if len(edges) > 1:
+            for i in range(len(edges) - 1):
+                upper_inclusive = i == len(edges) - 2
+                mask = (mu >= edges[i]) & ((mu <= edges[i + 1]) if upper_inclusive else (mu < edges[i + 1]))
+                if np.any(mask):
+                    calibration_error += float(np.mean(mask)) * abs(float(mu[mask].mean() - y[mask].mean()))
+
+        return {
+            "mean_expected_count": float(mu.mean()),
+            "mean_observed_count": float(y.mean()),
+            "count_mae": float(np.mean(np.abs(mu - y))),
+            "count_rmse": float(np.sqrt(np.mean((mu - y) ** 2))),
+            "poisson_deviance": float(poisson_deviance),
+            "count_calibration_error": float(calibration_error),
+            "break_even_expected_count": self.break_even_expected_count,
+            "mean_ev_per_bet": float(np.mean(self.expected_value_per_bet(mu))),
+        }
 
     def log_loss(self, proba_all: np.ndarray, y_all: np.ndarray) -> float:
         """Hàm mất mát entropy chéo (Log Loss) — càng thấp càng tốt."""
@@ -119,6 +175,8 @@ class EvaluationMetrics:
         results: pd.DataFrame,
         proba_history: Optional[np.ndarray] = None,   # matrix (n_days, 100)
         y_history: Optional[np.ndarray] = None,       # matrix (n_days, 100)
+        expected_count_history: Optional[np.ndarray] = None,
+        count_history: Optional[np.ndarray] = None,
     ) -> dict:
         """Tổng hợp đầy đủ các chỉ số đánh giá."""
         n_days = len(results)
@@ -142,6 +200,9 @@ class EvaluationMetrics:
             metrics["ece"] = self.ece_score(p_flat, y_flat)
             metrics["precision_10"] = self.precision_at_k(proba_history, y_history, k=10)
             metrics["recall_10"] = self.recall_at_k(proba_history, y_history, k=10)
+
+        if expected_count_history is not None and count_history is not None:
+            metrics.update(self.count_forecast_metrics(expected_count_history, count_history))
 
         # Tính chuỗi thắng liên tiếp lớn nhất
         hits = results["hit"].values if "hit" in results.columns else []

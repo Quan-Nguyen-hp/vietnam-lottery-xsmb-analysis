@@ -39,6 +39,21 @@ def get_all_models() -> list[BaseProbabilityModel]:
     ]
 
 
+# Chỉ đưa model vào danh sách này sau khi CI95 của chênh lệch ROI ghép cặp
+# Pruned-fixed − Full nằm hoàn toàn trên 0. Backtest hiện tại chưa đạt điều kiện.
+_PRUNED_MODEL_NAMES: set[str] = set()
+
+
+def get_pruned_models() -> list[BaseProbabilityModel]:
+    """Trả về models chưa bị loại bởi ablation §5.
+
+    Model chỉ bị loại khi ablation tạo ứng viên và kiểm định ghép cặp xác nhận
+    ensemble rút gọn tốt hơn full ensemble với CI95 của chênh lệch ROI > 0.
+    Không xóa code — chỉ lọc danh sách. Cập nhật _PRUNED_MODEL_NAMES khi có ablation mới.
+    """
+    return [m for m in get_all_models() if m.name not in _PRUNED_MODEL_NAMES]
+
+
 __all__ = [
     "BaseProbabilityModel",
     "MaxDelayPredictor",
@@ -54,4 +69,3 @@ __all__ = [
     "LightGBMProbabilityModel",
     "get_all_models",
 ]
-

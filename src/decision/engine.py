@@ -37,6 +37,8 @@ class DayDecision:
     decisions: list[NumberDecision] = field(default_factory=list)
     diversification_score: float = 1.0
     rank_stability_index: float = 1.0  # Spearman Rank Correlation (PSI)
+    # Thống kê các cổng quyết định, để phân biệt SKIP có chủ đích với lỗi pipeline.
+    decision_summary: dict = field(default_factory=dict)
 
     # Pipeline Metadata (MLOps)
     feature_version: str = "v1"
@@ -45,6 +47,11 @@ class DayDecision:
     evidence_version: str = "v1.0"
     git_commit: str = "abc123x"
     random_seed: int = 42
+
+    # §7 Kelly minh bạch: tách điểm vốn và tiền quy đổi
+    kelly_capital_declared: bool = False
+    kelly_capital_points: float = 0.0
+    kelly_point_value_vnd: float = 0.0
 
     @property
     def bets(self) -> list[NumberDecision]:
@@ -56,7 +63,7 @@ class DayDecision:
 
     def to_dict(self) -> dict:
         """Đặc tả khớp 100% với Data Contract và Pipeline Metadata."""
-        return {
+        result = {
             "pipeline_metadata": {
                 "run_id": self.run_id,
                 "date": self.date,
@@ -69,19 +76,28 @@ class DayDecision:
             },
             "diversification_score": round(self.diversification_score, 4),
             "rank_stability_index": round(self.rank_stability_index, 4),
+            "decision_summary": self.decision_summary,
+            "kelly_transparency": {
+                "capital_declared": self.kelly_capital_declared,
+                "capital_points": self.kelly_capital_points if self.kelly_capital_declared else None,
+                "point_value_vnd": self.kelly_point_value_vnd if self.kelly_capital_declared else None,
+            },
             "bets": [
                 {
                     "number": int(d.number),
                     "probability": round(d.probability, 4),
                     "confidence": round(d.confidence, 4),
                     "risk": d.risk,
-                    "allocation": round(d.allocation, 4),
+                    "allocation": round(d.allocation, 4),  # Fraction vốn (0-1), LUÔN có
+                    "allocation_points": round(d.allocation * self.kelly_capital_points, 2) if self.kelly_capital_declared else None,
+                    "allocation_vnd": round(d.allocation * self.kelly_capital_points * self.kelly_point_value_vnd, 0) if self.kelly_capital_declared else None,
                     "decision": d.decision,
                     "explanation": d.explanation
                 }
                 for d in self.decisions if d.decision == "BET"
             ]
         }
+        return result
 
 
 class DecisionEngine:
@@ -99,11 +115,15 @@ class DecisionEngine:
         kelly_odds: float = 3.666,
         kelly_fraction: float = 0.20,
         min_diversification: float = 0.85,
+        kelly_selects_bets: bool = True,
+        apply_diversification: bool = True,
     ):
         self._min_prob = min_probability
         self._min_conf = min_confidence
         self._top_k = top_k
         self._min_div = min_diversification
+        self._kelly_selects_bets = kelly_selects_bets
+        self._apply_diversification = apply_diversification
         self._confidence_engine = ConfidenceEngine()
         self._kelly = KellyCriterion(
             odds=kelly_odds,
@@ -154,20 +174,24 @@ class DecisionEngine:
             confidence = np.full(100, 0.5)
 
         # 4. Tìm kiếm ứng viên cược sơ bộ
-        candidate_bets = []
+        eligible_bets = []
         ranks = np.argsort(meta_proba)[::-1]
 
         for rank_idx, num in enumerate(ranks):
             p = float(meta_proba[num])
             c = float(confidence[num])
             if p >= self._min_prob and c >= self._min_conf:
-                candidate_bets.append(int(num))
+                eligible_bets.append(int(num))
 
-        candidate_bets = candidate_bets[:self._top_k]
+        candidate_bets = eligible_bets[:self._top_k]
 
         # 5. Tính Diversification Score
         div_score = self._risk_filters.compute_diversification_score(candidate_bets)
-        reject_by_diversification = len(candidate_bets) > 1 and div_score < self._min_div
+        reject_by_diversification = (
+            self._apply_diversification
+            and len(candidate_bets) > 1
+            and div_score < self._min_div
+        )
 
         # 6. Tính Kelly và Tối ưu hóa phân bổ vốn
         raw_kelly = self._kelly.compute(meta_proba, confidence)
@@ -175,6 +199,10 @@ class DecisionEngine:
             optimized_kelly = self._risk_filters.optimize_allocations(raw_kelly, candidate_bets)
         else:
             optimized_kelly = np.zeros(100)
+
+        probability_qualified = int(np.sum(meta_proba >= self._min_prob))
+        confidence_qualified = int(np.sum(confidence >= self._min_conf))
+        positive_kelly = sum(1 for num in candidate_bets if raw_kelly[num] > 0)
 
         # 7. Đóng gói danh mục cược + Giải thích (Explainability)
         decisions = []
@@ -233,11 +261,15 @@ class DecisionEngine:
                             explanation["approximate_contributions"][feat] = f"{approx_contrib:+.4f}"
 
             # Phân loại hành động (Decision action)
-            if num_int in candidate_bets and not reject_by_diversification and k > 0:
+            if (
+                num_int in candidate_bets
+                and not reject_by_diversification
+                and (not self._kelly_selects_bets or k > 0)
+            ):
                 action = "BET"
             elif reject_by_diversification and num_int in candidate_bets:
                 action = "SKIP"
-            elif num_int in candidate_bets and k == 0:
+            elif num_int in candidate_bets and self._kelly_selects_bets and k == 0:
                 action = "SKIP"
             elif p >= self._min_prob and c < self._min_conf:
                 action = "SKIP"
@@ -256,12 +288,32 @@ class DecisionEngine:
                 explanation=explanation
             ))
 
+        bets_count = sum(1 for d in decisions if d.decision == "BET")
+        decision_summary = {
+            "thresholds": {
+                "min_probability": self._min_prob,
+                "min_confidence": self._min_conf,
+                "min_diversification": self._min_div,
+            },
+            "probability_qualified": probability_qualified,
+            "confidence_qualified": confidence_qualified,
+            "candidates_after_probability_and_confidence": len(candidate_bets),
+            "candidates_before_top_k": len(eligible_bets),
+            "top_k_limited": len(eligible_bets) > self._top_k,
+            "candidates_with_positive_kelly": positive_kelly,
+            "rejected_by_diversification": reject_by_diversification,
+            "kelly_selects_bets": self._kelly_selects_bets,
+            "apply_diversification": self._apply_diversification,
+            "final_bets": bets_count,
+        }
+
         return DayDecision(
             date=date,
             run_id=run_id,
             decisions=decisions,
             diversification_score=div_score,
             rank_stability_index=rank_stability,
+            decision_summary=decision_summary,
             feature_version=feature_version,
             model_version=model_version,
             belief_version=belief_version,

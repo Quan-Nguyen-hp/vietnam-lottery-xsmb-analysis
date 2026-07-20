@@ -30,9 +30,11 @@ from evidence.builder import EvidenceBuilder
 from evidence.store import EvidenceStore
 from features.feature_store import FeatureStore
 from probability import get_all_models
+from probability.count_expectation import EWMAHitCountChallenger
 from probability.lgb_model import LightGBMProbabilityModel
 from meta.fusion import MetaFusion
 from decision.engine import DecisionEngine
+from decision.edge_gate import EdgeGate
 from sklearn.calibration import CalibratedClassifierCV, FrozenEstimator
 
 DATA_CSV = root_dir / "data" / "xsmb-2-digits.csv"
@@ -49,7 +51,7 @@ def get_git_commit() -> str:
         res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
         return res.stdout.strip()
     except Exception:
-        return "build_1.3.1"
+        return "build_1.3.2"
 
 
 def get_file_hash(path: Path) -> str:
@@ -123,11 +125,17 @@ def compute_ece(probs: np.ndarray, labels: np.ndarray, n_bins: int = 10) -> floa
     return float(ece)
 
 
-def run_predict(target_date: date, top_k: int = 2) -> dict:
+def run_shared_prediction_pipeline(
+    target_date: date,
+    top_k: int = 2,
+    prior_entries: list[dict] | None = None,
+) -> dict:
+    """Pipeline production dùng chung; ``prior_entries`` phục vụ walk-forward backtest."""
+
     target_date_str = str(target_date)
 
     # Đọc log lịch sử để lấy trọng số ngày hôm trước phục vụ EMA smoothing
-    log = load_log()
+    log = prior_entries if prior_entries is not None else load_log()
     prev_weights = {}
     if log:
         # Lấy bản ghi cuối cùng có dynamic_weights
@@ -147,8 +155,9 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
     if not history_indices:
         raise ValueError(f"Không tìm thấy lịch sử trước ngày {target_date_str}")
         
-    last_hist_idx = history_indices[-1]
-    df_hist, S_hist = loader.slice_history(last_hist_idx)
+    # slice_history dùng mốc exclusive; +1 để bao gồm đúng ngày lịch sử gần nhất.
+    history_end_idx = history_indices[-1] + 1
+    df_hist, S_hist = loader.slice_history(history_end_idx)
 
     # 1. Evidence & Feature Engine
     evidence_store = EvidenceStore()
@@ -163,7 +172,7 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
     lgb_model = LightGBMProbabilityModel()
     
     # Train lgb_model trên 365 ngày lịch sử (kết thúc trước 90 ngày validation để tránh optimistic bias - D3 Point 1)
-    train_end_idx = last_hist_idx - 90
+    train_end_idx = history_end_idx - 90
     train_start_idx = max(50, train_end_idx - 365)
     
     train_snapshots = []
@@ -203,7 +212,7 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
     val_labels = []
     
     # 4.1. Thu thập dữ liệu toàn bộ cửa sổ validation
-    for t_idx in range(last_hist_idx - 90, last_hist_idx):
+    for t_idx in range(history_end_idx - 90, history_end_idx):
         t_df_hist, t_S_hist = loader.slice_history(t_idx)
         t_date = df_full.iloc[t_idx]['date'].to_pydatetime()
         t_df_feat = feature_store.build(evidence_builder.build_all(t_df_hist, t_S_hist, t_date, save=True), t_date.strftime('%Y-%m-%d'), S=t_S_hist)
@@ -217,16 +226,17 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
         val_labels.append(t_y)
         
     X_val = np.vstack([df[meta_cols].values for df in val_snapshots])
+    X_val_df = pd.DataFrame(X_val, columns=meta_cols)
     y_val = np.concatenate(val_labels)
     
     # 4.2. Huấn luyện các bộ hiệu chuẩn trên nửa đầu (45 ngày đầu, tương ứng 4500 mẫu)
     # Cắt lát dữ liệu nửa đầu
     half_samples = 45 * 100
-    X_cal_fit = X_val[:half_samples]
+    X_cal_fit = X_val_df.iloc[:half_samples]
     y_cal_fit = y_val[:half_samples]
     
     # Cắt lát dữ liệu nửa sau để tuyển chọn hiệu chuẩn và train Meta Fusion weights
-    X_cal_sel = X_val[half_samples:]
+    X_cal_sel = X_val_df.iloc[half_samples:]
     y_cal_sel = y_val[half_samples:]
     
     # Sigmoid Calibration Fit & Composite Score (D3 Point B)
@@ -262,7 +272,7 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
         brier_loser = brier_sig
         
     # Tính toán xác suất hiệu chuẩn của LightGBM trên target day
-    calibrated_lgb_probs = best_calibrator.predict_proba(df_feat[meta_cols].values)[:, 1]
+    calibrated_lgb_probs = best_calibrator.predict_proba(df_feat[meta_cols])[:, 1]
     
     # 4.3. Huấn luyện lại trọng số dynamic weight trên xác suất ĐÃ HIỆU CHUẨN (D3 Point 2)
     eval_predictions_sel = {m.name: [] for m in static_models}
@@ -272,7 +282,7 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
     calibrated_lgbm_sel_preds = best_calibrator.predict_proba(X_cal_sel)[:, 1].reshape(45, 100)
     eval_predictions_sel[lgb_model.name] = list(calibrated_lgbm_sel_preds)
     
-    for i, t_idx in enumerate(range(last_hist_idx - 45, last_hist_idx)):
+    for i, t_idx in enumerate(range(history_end_idx - 45, history_end_idx)):
         t_df_hist, t_S_hist = loader.slice_history(t_idx)
         t_df_feat = val_snapshots[45 + i]
         for m in static_models:
@@ -312,8 +322,23 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
         min_confidence=0.45,
         top_k=top_k,
         kelly_odds=PAYOUT_PER_HIT / COST_PER_BET,
-        kelly_fraction=0.20
+        kelly_fraction=0.20,
+        # Kelly chỉ phân bổ vốn; không được biến số đã đạt p/confidence thành SKIP.
+        kelly_selects_bets=False,
     )
+
+    # §7 Kelly transparency: đọc khai báo vốn từ evaluation_policy.json
+    kelly_policy_path = root_dir / "predictions" / "evaluation_policy.json"
+    kelly_capital_declared = False
+    kelly_capital_points = 0.0
+    kelly_point_value_vnd = 0.0
+    if kelly_policy_path.exists():
+        with open(kelly_policy_path, "r", encoding="utf-8") as kf:
+            kpol = json.load(kf)
+            kp = kpol.get("kelly_policy", {})
+            kelly_capital_declared = kp.get("declared", False)
+            kelly_capital_points = kp.get("starting_capital_points", 0.0) or 0.0
+            kelly_point_value_vnd = kp.get("point_value_vnd", 0.0) or 0.0
 
     day_decision = decision_engine.decide(
         date=target_date_str,
@@ -324,11 +349,39 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
         feature_importance_df=lgb_model.feature_importance()
     )
 
+    # §7: Truyền Kelly capital info vào DayDecision
+    day_decision.kelly_capital_declared = kelly_capital_declared
+    day_decision.kelly_capital_points = kelly_capital_points
+    day_decision.kelly_point_value_vnd = kelly_point_value_vnd
+
     decision_dict = day_decision.to_dict()
+
+    # Shadow challenger: dự báo E[số nháy], chỉ ghi log nghiên cứu và không đổi bets production.
+    count_challenger = EWMAHitCountChallenger(top_k=top_k)
+    count_forecast = count_challenger.predict(df_hist, loader.prize_cols())
+    decision_dict["count_challenger"] = count_challenger.to_shadow_dict(count_forecast)
+
+    # ── Edge Gate check (§6): Block BET khi gate FAIL ──────────────────
+    edge_gate = EdgeGate()
+    gate_result = edge_gate.check()
+    decision_dict["edge_gate"] = gate_result
+
+    if not gate_result["pass"]:
+        # Force tất cả BET → PAPER_TRADE
+        for bet in decision_dict["bets"]:
+            bet["decision"] = "PAPER_TRADE"
+            bet["original_decision"] = "BET"
+        decision_dict["decision_summary"]["edge_gate_blocked"] = True
+        decision_dict["decision_summary"]["edge_gate_status"] = gate_result["status"]
+        decision_dict["decision_summary"]["edge_gate_action"] = gate_result["action"]
+    else:
+        decision_dict["decision_summary"]["edge_gate_blocked"] = False
+        decision_dict["decision_summary"]["edge_gate_status"] = "PASS"
+        decision_dict["decision_summary"]["edge_gate_action"] = "BET"
     
     # Save raw probabilities for authentic scientific audit & schema version tagging
     decision_dict["pipeline_metadata"]["schema_version"] = "2.0"
-    decision_dict["pipeline_metadata"]["prediction_engine_version"] = "1.3.1"
+    decision_dict["pipeline_metadata"]["prediction_engine_version"] = "1.3.2"
     decision_dict["pipeline_metadata"]["belief_engine_version"] = "1.3.1"
     decision_dict["ensemble_proba"] = [float(p) for p in meta_proba]
     decision_dict["model_probas"] = {
@@ -358,7 +411,7 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
         "config_hash": get_file_hash(root_dir / "pyproject.toml"),
         "dataset_hash": dataset_hash,
         "training_window": f"{train_start_idx}-{train_end_idx}",
-        "validation_window": f"{last_hist_idx - 90}-{last_hist_idx}",
+        "validation_window": f"{history_end_idx - 90}-{history_end_idx}",
         "prediction_date": target_date_str,
         "feature_count": len(meta_cols),
         "environment": {
@@ -374,11 +427,25 @@ def run_predict(target_date: date, top_k: int = 2) -> dict:
     return decision_dict
 
 
+def run_predict(target_date: date, top_k: int = 2) -> dict:
+    """Compatibility wrapper cho CLI production."""
+    return run_shared_prediction_pipeline(target_date, top_k=top_k)
+
+
 def print_prediction(entry: dict) -> None:
     meta = entry["pipeline_metadata"]
     bets = entry["bets"]
     div_score = entry["diversification_score"]
     stability = entry["rank_stability_index"]
+
+    # Edge Gate status
+    gate = entry.get("edge_gate", {})
+    gate_blocked = entry.get("decision_summary", {}).get("edge_gate_blocked", False)
+    gate_status = gate.get("status", "UNKNOWN")
+
+    # §7 Kelly transparency
+    kelly_trans = entry.get("kelly_transparency", {})
+    kelly_declared = kelly_trans.get("capital_declared", False)
 
     print()
     print("╔══════════════════════════════════════════════════════╗")
@@ -387,24 +454,76 @@ def print_prediction(entry: dict) -> None:
     print(f"║  Mã Dự án : XPIS v1.2 APPROVED                       ║")
     print(f"║  Run ID   : {meta['run_id']:<41}║")
     print(f"║  Độ đa dạng (Div): {div_score:.4f} | Spearman PSI: {stability:.4f} ║")
+    if gate_blocked:
+        print(f"║  ⛔ EDGE GATE: {gate_status:<9} → PAPER_TRADE MODE         ║")
+    else:
+        print(f"║  ✅ EDGE GATE: {gate_status:<9}                            ║")
+    # §7: Hiển thị Kelly capital info
+    if kelly_declared:
+        cap_pts = kelly_trans.get("capital_points", 0)
+        pt_val = kelly_trans.get("point_value_vnd", 0)
+        print(f"║  💰 Vốn: {cap_pts:.0f} điểm × {pt_val:,.0f}đ/điểm = {cap_pts * pt_val:,.0f}đ  ║")
+    else:
+        print("║  💰 Vốn: CHƯA KHAI BÁO — allocation là điểm giả định    ║")
     print("╠══════════════════════════════════════════════════════╣")
     if len(bets) == 0:
         print("║  👉  HÀNH ĐỘNG: SKIP (Bộ lọc rủi ro chặn toàn bộ)     ║")
+        summary = entry.get("decision_summary", {})
+        if summary:
+            print(
+                "║  Chẩn đoán: "
+                f"P={summary.get('probability_qualified', 0)} | "
+                f"C={summary.get('confidence_qualified', 0)} | "
+                f"Eligible={summary.get('candidates_before_top_k', 0)} | "
+                f"TopK={summary.get('candidates_after_probability_and_confidence', 0)} | "
+                f"Kelly+={summary.get('candidates_with_positive_kelly', 0)}"
+            )
+    elif gate_blocked:
+        print("║  📋  HÀNH ĐỘNG: PAPER_TRADE (Edge Gate chặn BET)       ║")
+        print("║  ⚠️  Dự báo dưới đây chỉ để theo dõi, KHÔNG đặt tiền   ║")
+        for b in bets[:10]:
+            num_str = f"{b['number']:02d}"
+            prob_str = f"{b['probability'] * 100:.1f}%"
+            conf_str = f"{b['confidence']:.2f}"
+            alloc_str = f"{b['allocation'] * 100:.1f}%"
+            state_delay = b["explanation"]["feature_states"].get("delay", "0.0σ")
+            approx_contrib = b["explanation"]["approximate_contributions"].get("delay", "+0.0000")
+            print(f"║  📋 Số {num_str} | P: {prob_str} | Conf: {conf_str} | Vốn Kelly: {alloc_str:<5} ║")
+            print(f"║    [Audit] Delay: {state_delay:<6} | Approx Contrib: {approx_contrib:<8}      ║")
     else:
         print("║  🎯  HÀNH ĐỘNG: BET (Danh mục đề xuất tối ưu)        ║")
         for b in bets:
             num_str = f"{b['number']:02d}"
             prob_str = f"{b['probability'] * 100:.1f}%"
             conf_str = f"{b['confidence']:.2f}"
-            alloc_str = f"{b['allocation'] * 100:.1f}%"
-            
+            alloc_frac = f"{b['allocation'] * 100:.1f}%"
+
+            # §7: Tách điểm vốn và tiền quy đổi
+            if kelly_declared and b.get("allocation_points") is not None:
+                alloc_display = f"{b['allocation_points']:.1f}đ ({b['allocation_vnd']:,.0f}đ)"
+            else:
+                alloc_display = f"{alloc_frac} (giả định)"
+
             # Show explainability
             state_delay = b["explanation"]["feature_states"].get("delay", "0.0σ")
             approx_contrib = b["explanation"]["approximate_contributions"].get("delay", "+0.0000")
-            
-            print(f"║  - Số {num_str} | P: {prob_str} | Conf: {conf_str} | Vốn Kelly: {alloc_str:<5} ║")
+
+            print(f"║  - Số {num_str} | P: {prob_str} | Conf: {conf_str} | Kelly: {alloc_display:<16} ║")
             print(f"║    [Audit] Delay: {state_delay:<6} | Approx Contrib: {approx_contrib:<8}      ║")
     print("╚══════════════════════════════════════════════════════╝")
+    challenger = entry.get("count_challenger", {})
+    shadow_picks = challenger.get("picks", [])
+    if shadow_picks:
+        shadow_text = ", ".join(
+            f"{pick['number']:02d}(μ={pick['expected_count']:.3f},LCB={pick['lower_bound_95']:.3f})"
+            for pick in shadow_picks
+        )
+        print(f"  🧪 SHADOW COUNT — PAPER-TRADE ONLY: {shadow_text}")
+    else:
+        print("  🧪 SHADOW COUNT — SKIP (không LCB nào vượt hòa vốn)")
+    # §7: Disclaimer khi chưa khai báo vốn
+    if not kelly_declared:
+        print("  ⚠️  CHƯA KHAI BÁO VỐN — allocation Kelly là điểm giả định, không phải tiền thật")
     print()
 
 
@@ -457,6 +576,8 @@ def main():
         print(f"❌ Lỗi thực thi dự báo: {e}")
         import traceback
         traceback.print_exc()
+        # Báo lỗi cho auto_runner/GitHub Actions; không được ghi nhận nhầm là SKIP.
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

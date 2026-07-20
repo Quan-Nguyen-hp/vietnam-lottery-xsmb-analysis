@@ -47,6 +47,28 @@ def save_log(log: list) -> None:
         json.dump(log, f, ensure_ascii=False, indent=2)
 
 
+def evaluate_count_challenger(entry: dict, actual_counts: dict[int, int]) -> dict | None:
+    """Chấm shadow challenger theo số nháy; không thay đổi kết quả production."""
+    challenger = entry.get("count_challenger")
+    if not challenger:
+        return None
+    challenger_numbers = [pick["number"] for pick in challenger.get("picks", [])]
+    challenger_hits = sum(actual_counts.get(number, 0) for number in challenger_numbers)
+    challenger_cost = len(challenger_numbers) * COST_PER_BET
+    challenger_revenue = challenger_hits * PAYOUT_PER_HIT
+    evaluation = {
+        "actual_hits": challenger_hits,
+        "cost_k": challenger_cost,
+        "revenue_k": challenger_revenue,
+        "pnl_k": challenger_revenue - challenger_cost,
+        "paper_trade": True,
+    }
+    challenger["evaluation"] = evaluation
+    for pick in challenger.get("picks", []):
+        pick["actual_hits"] = actual_counts.get(pick["number"], 0)
+    return evaluation
+
+
 def fetch_results_for_date(target_date: date) -> list[int] | None:
     """Fetch kết quả 2 chữ số cuối từ web cho target_date."""
     try:
@@ -135,6 +157,9 @@ def main():
         entry["ensemble_hits"] = ensemble_hits
         entry["revenue_k"] = revenue
         entry["pnl_k"] = pnl
+
+        # Chấm shadow count challenger độc lập; đây là PnL giả lập, không phải tiền thật.
+        evaluate_count_challenger(entry, actual_counts)
         
         # Nếu là v1.2, ghi nhận kết quả và PnL trực tiếp vào danh sách bets để Dashboard hiển thị
         if is_v12:
@@ -154,6 +179,16 @@ def main():
         print(f"  Chi phí  : {cost:,}k đ")
         print(f"  Thu về   : {revenue:,}k đ")
         print(f"  Lãi/Lỗ  : {pnl:+,}k đ")
+        challenger = entry.get("count_challenger")
+        if challenger:
+            shadow_numbers = [pick["number"] for pick in challenger.get("picks", [])]
+            shadow_eval = challenger.get("evaluation", {})
+            print(
+                "  Shadow count challenger: "
+                f"{', '.join(f'{number:02d}' for number in shadow_numbers) if shadow_numbers else 'SKIP'} | "
+                f"hits={shadow_eval.get('actual_hits', 0)} | "
+                f"PnL giả lập={shadow_eval.get('pnl_k', 0):+,}k đ"
+            )
 
     # Thống kê tổng hợp trượt
     completed_entries = []

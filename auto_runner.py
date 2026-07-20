@@ -91,7 +91,12 @@ def main():
         else:
             log(f"✅ Kết quả {today} đã được cập nhật rồi")
 
-        # 2. Dự đoán ngày mai (nếu chưa)
+        # 2. Cập nhật báo cáo prospective cho shadow challenger.
+        run_script("backtests/evaluate_count_challenger.py")
+        # 3. Cập nhật trạng thái holdout; script chỉ đọc, không đổi policy.
+        run_script("backtests/holdout_status.py")
+
+        # 4. Dự đoán ngày mai (nếu chưa)
         if not already_predicted(tomorrow):
             log(f"🔮 Dự đoán ngày mai {tomorrow}…")
             ok = run_script("daily_predict.py", ["--date", str(tomorrow), "--no-fetch"])
@@ -115,6 +120,9 @@ def main():
                 log(f"⚠️  Không thể dự đoán {today}")
         else:
             log(f"✅ Đã có dự đoán cho {today} rồi — chờ kết quả sau 18:35")
+
+        # Kiểm tra trạng thái holdout ở cả phiên trước xổ số.
+        run_script("backtests/holdout_status.py")
 
     log("🏁 Auto runner hoàn thành")
     log("=" * 55)

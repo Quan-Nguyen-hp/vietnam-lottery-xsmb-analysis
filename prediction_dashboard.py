@@ -29,6 +29,11 @@ def bar_ascii(value, max_val=100, width=20):
         n = min(int(abs(value) / max_val * width), width)
         return ("░" * n).ljust(width)
 
+
+def entry_date(entry):
+    return entry.get("pipeline_metadata", {}).get("date", entry.get("date", "?"))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Dashboard dự đoán XSMB")
     parser.add_argument("--days", type=int, default=None, help="Số ngày gần nhất (mặc định: toàn bộ)")
@@ -43,6 +48,9 @@ def main():
 
     completed = [e for e in log if e.get("actual_results") is not None]
     pending   = [e for e in log if e.get("actual_results") is None]
+    # Holdout status dùng cùng nguồn kiểm tra với auto_runner, chỉ đọc.
+    from backtests.holdout_status import build_status
+    holdout_status = build_status()
 
     if args.days:
         completed = completed[-args.days:]
@@ -53,6 +61,25 @@ def main():
     if args.days:
         title += f" — {args.days} NGÀY GẦN NHẤT"
     print(f"║{title:<62}║")
+    print(f"{'╠' + SEP + '╣'}")
+
+    holdout_label = "SẴN SÀNG" if holdout_status["ready"] else "ĐANG CHỜ DỮ LIỆU"
+    print(f"║  🔒 TRẠNG THÁI HOLDOUT: {holdout_label:<37}║")
+    print(f"║  Holdout bắt đầu       : {holdout_status['start_date']:<32}║")
+    print(
+        f"║  Yêu cầu               : {holdout_status['minimum_days']} ngày"
+        f"{' '*43}║"
+    )
+    print(
+        f"║  Dữ liệu hợp lệ        : {holdout_status['available_days']}/"
+        f"{holdout_status['minimum_days']} ngày{' '*31}║"
+    )
+    print(
+        f"║  Prediction log hợp lệ : {holdout_status['completed_holdout_log_entries']}"
+        f"{' '*45}║"
+    )
+    if holdout_status["pre_holdout_log_entries"]:
+        print(f"║  ⚠️  Log trước holdout đã loại: {len(holdout_status['pre_holdout_log_entries'])}{' '*29}║")
     print(f"{'╠' + SEP + '╣'}")
 
     if not completed:
@@ -81,7 +108,7 @@ def main():
         else:
             break
 
-    print(f"║  Kỳ theo dõi  : {completed[0]['date']} → {completed[-1]['date']}{' '*16}║")
+    print(f"║  Kỳ theo dõi  : {entry_date(completed[0])} → {entry_date(completed[-1])}{' '*16}║")
     print(f"║  Số ngày theo dõi : {len(completed):<41}║")
     print(f"║  Chưa có kết quả  : {len(pending):<41}║")
     print(f"{'╠' + SEP + '╣'}")
@@ -96,11 +123,17 @@ def main():
     print(f"║  {streak_icon} {streak_label:<18}: {streak} ngày{' '*27}║")
     print(f"{'╠' + SEP + '╣'}")
 
+    # §7 Kelly transparency disclaimer
+    print(f"║  💰 KELLY TRANSPARENCY{' '*39}║")
+    print(f"║  ⚠️  Kết quả là điểm mô phỏng, KHÔNG phải lợi nhuận tiền thật{' '*8}║")
+    print(f"║  Cần khai báo vốn trong evaluation_policy.json để hiển thị VND{' '*7}║")
+    print(f"{'╠' + SEP + '╣'}")
+
     # ── Phân phối PnL theo tháng ──────────────────────────────────────────
     from collections import defaultdict
     monthly = defaultdict(lambda: {"pnl": 0, "cost": 0, "win": 0, "total": 0})
     for e in completed:
-        ym = e["date"][:7]
+        ym = entry_date(e)[:7]
         monthly[ym]["pnl"]   += e.get("pnl_k", 0) or 0
         monthly[ym]["cost"]  += e.get("cost_k", 0) or 0
         monthly[ym]["total"] += 1
@@ -145,7 +178,7 @@ def main():
         pnl   = e.get("pnl_k") or 0
         icon  = "✅" if hits > 0 else "  "
         pnl_s = f"{pnl:>+,}kđ"
-        print(f"║  {e['date']:<12} {picks_str:>14} {icon}{hits:>4} {pnl_s:>10}  {'':>12}║")
+        print(f"║  {entry_date(e):<12} {picks_str:>14} {icon}{hits:>4} {pnl_s:>10}  {'':>12}║")
 
     print(f"{'╚' + SEP + '╝'}")
 
@@ -155,7 +188,7 @@ def main():
         for e in pending[-5:]:
             picks_list = e.get("ensemble_picks") or []
             picks_str = ",".join(f"{n:02d}" for n in picks_list)
-            print(f"   {e['date']}: chọn [{picks_str}]")
+            print(f"   {entry_date(e)}: chọn [{picks_str}]")
 
 if __name__ == "__main__":
     main()
