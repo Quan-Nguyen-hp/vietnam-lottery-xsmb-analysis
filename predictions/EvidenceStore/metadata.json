@@ -1,5 +1,0 @@
-{
-  "evidence_version": "v1.0",
-  "description": "XPIS Evidence Layer - Raw observations per number per day",
-  "schema": "100 rows × [number, date, + raw evidence columns]"
-}
