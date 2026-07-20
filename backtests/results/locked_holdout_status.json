@@ -15,7 +15,7 @@
     6,
     7
   ],
-  "holdout_log_entries": 0,
+  "holdout_log_entries": 1,
   "completed_holdout_log_entries": 0,
   "policy_mode": "paper_trade"
 }

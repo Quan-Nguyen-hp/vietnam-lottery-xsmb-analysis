@@ -4,7 +4,7 @@
 - **Holdout bắt đầu**: 2026-07-21
 - **Yêu cầu tối thiểu**: 180 ngày
 - **Dữ liệu hiện có**: 0 ngày (chưa có → chưa có)
-- **Prediction log trong holdout**: 0 bản ghi
+- **Prediction log trong holdout**: 1 bản ghi
 - **Bản ghi đã có actual result**: 0
 
 > Có bản ghi log trước ngày bắt đầu holdout; các bản ghi này bị loại khỏi đánh giá.
