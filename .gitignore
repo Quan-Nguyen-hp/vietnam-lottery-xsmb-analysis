@@ -141,3 +141,7 @@ predictions/models/
 # Log chạy tự động
 *.log
 auto_runner.log
+
+# IDE & deploy artifacts
+.zcode/
+.deploy-github-pages/
