@@ -21,9 +21,12 @@ from .ewma_prob import EWMAPredictor
 # Model 11 (Machine Learning Model)
 from .lgb_model import LightGBMProbabilityModel
 
+# Model 12 (Count Expectation Poisson Framework)
+from .count_poisson import CountEWMAPoissonPredictor
+
 
 def get_all_models() -> list[BaseProbabilityModel]:
-    """Trả về tất cả 11 models theo thứ tự chuẩn."""
+    """Trả về tất cả 12 models theo thứ tự chuẩn."""
     return [
         MaxDelayPredictor(),
         ConditionalPredictor(),
@@ -36,6 +39,7 @@ def get_all_models() -> list[BaseProbabilityModel]:
         BayesianPredictor(),
         EWMAPredictor(multi_scale=True),
         LightGBMProbabilityModel(),
+        CountEWMAPoissonPredictor(),
     ]
 
 
@@ -67,5 +71,6 @@ __all__ = [
     "BayesianPredictor",
     "EWMAPredictor",
     "LightGBMProbabilityModel",
+    "CountEWMAPoissonPredictor",
     "get_all_models",
 ]

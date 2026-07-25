@@ -94,6 +94,17 @@
         "min_child_samples": 30
       },
       "status": "active"
+    },
+    "count_ewma_poisson": {
+      "name": "count_ewma_poisson",
+      "type": "statistical",
+      "version": "1.0",
+      "description": "Mô hình ước lượng xác suất từ kỳ vọng số nháy Poisson dựa trên EWMA half-life 90 ngày.",
+      "parameters": {
+        "half_life": 90,
+        "lookback_days": 540
+      },
+      "status": "active"
     }
   }
 }
