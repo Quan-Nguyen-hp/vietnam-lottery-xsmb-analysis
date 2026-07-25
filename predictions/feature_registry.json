@@ -14,9 +14,9 @@
       "name": "delay_sq",
       "group": "delay",
       "formula": "delay ^ 2",
-      "description": "Bình phương khoảng trễ để nhấn mạnh các số cực khan.",
+      "description": "Cắt tỉa do điểm tầm quan trọng cực thấp (4.80) để giảm overfitting.",
       "version": "1.0",
-      "status": "active"
+      "status": "deprecated"
     },
     "delay_zscore": {
       "name": "delay_zscore",
@@ -93,9 +93,9 @@
     "cond_prob_yesterday": {
       "name": "cond_prob_yesterday",
       "group": "bayesian",
-      "formula": "Mean(P(num_t | active_yest))",
-      "description": "Xác suất bạc nhớ trung bình dựa trên danh sách các số đã về hôm qua.",
-      "version": "1.0",
+      "formula": "EWMA3d(Mean(P(num_t | active_yest)))",
+      "description": "Xác suất Bạc Nhớ làm mịn EWMA 3 ngày để triệt tiêu nhiễu giật cục ngắn hạn.",
+      "version": "1.1",
       "status": "active"
     },
     "cond_prob_head_cam": {

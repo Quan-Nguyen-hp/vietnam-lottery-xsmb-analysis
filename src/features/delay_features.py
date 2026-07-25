@@ -29,7 +29,7 @@ class DelayFeatureExtractor(BaseFeatureExtractor):
 
             # Raw delay
             f["delay"] = current_delay
-            f["delay_sq"] = current_delay ** 2
+            # Note: delay_sq is pruned due to low feature importance score (4.80) to reduce overfitting.
 
             # Statistical moments of historical gaps
             f["delay_mean"] = float(np.mean(hist_arr))

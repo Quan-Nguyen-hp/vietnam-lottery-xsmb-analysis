@@ -56,25 +56,33 @@ class BayesianFeatureExtractor(BaseFeatureExtractor):
     def extract(self, df_evidence: pd.DataFrame) -> pd.DataFrame:
         results = []
 
+        # Precompute EWMA 3-day smoothed Bạc Nhớ probabilities for all 100 numbers
+        S = self._S
+        N = S.shape[0] if S is not None else 0
+        ewma_cond_yest = np.full(100, 0.27, dtype=float)
+
+        if N >= 1:
+            p1 = (S[-1] @ self._M) / (S[-1].sum() + 1e-5)
+            if N >= 3:
+                p2 = (S[-2] @ self._M) / (S[-2].sum() + 1e-5)
+                p3 = (S[-3] @ self._M) / (S[-3].sum() + 1e-5)
+                ewma_cond_yest = 0.5 * p1 + 0.3 * p2 + 0.2 * p3
+            elif N == 2:
+                p2 = (S[-2] @ self._M) / (S[-2].sum() + 1e-5)
+                ewma_cond_yest = 0.6 * p1 + 0.4 * p2
+            else:
+                ewma_cond_yest = p1
+
         for _, row in df_evidence.iterrows():
             num = int(row["number"])
             f = {}
 
             # Base frequency (prior)
             p_prior = float(row.get("freq_30d", 0.27)) if "freq_30d" in row.index else 0.27
-
-            # P(num | yesterday_actives) — Bạc nhớ
             yesterday_actives = row.get("yesterday_actives", [])
-            if yesterday_actives and self._S is not None:
-                active_arr = np.zeros(100, dtype=np.int8)
-                for a in yesterday_actives:
-                    if 0 <= a < 100:
-                        active_arr[a] = 1
-                f["cond_prob_yesterday"] = float(
-                    (active_arr @ self._M[:, num]) / (active_arr.sum() + 1e-5)
-                )
-            else:
-                f["cond_prob_yesterday"] = p_prior
+
+            # P(num | yesterday_actives) — Bạc nhớ với bộ lọc làm mịn EWMA 3 ngày
+            f["cond_prob_yesterday"] = float(ewma_cond_yest[num]) if N >= 1 else p_prior
 
             # P(num | yesterday head câm)
             head_cam = row.get("yesterday_head_cam", [])
