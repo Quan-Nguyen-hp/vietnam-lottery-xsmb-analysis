@@ -1,11 +1,14 @@
 """
 DECISION INTELLIGENCE — src/decision/edge_gate.py
-Edge Gate: kiểm tra lợi thế thống kê trước khi cho phép BET.
+Edge Gate: kiểm tra lợi thế thống kê 2 tầng trước khi cho phép BET.
 
-Nguyên tắc:
-- Chỉ cho phép BET khi bằng chứng thống kê đủ mạnh.
-- Khi Edge Gate FAIL → force tất cả decisions sang PAPER_TRADE.
-- State được lưu trong evaluation_policy.json để duy trì liên tục.
+Kiến trúc 2 tầng (Dual-Tier Edge Gate):
+- Tầng 1 (Tier 1 - Statistical Model Gate):
+  * Kiểm định Brier Score & ECE: delta_brier_upper_95 < 0 (CI95 không chứa 0) và ece_score <= 0.0800.
+  * Khi Tier 1 PASS → Mô hình chứng minh có tri thức thống kê thực sự, cho phép PAPER_TRADE_APPROVED.
+- Tầng 2 (Tier 2 - Capital Execution Gate):
+  * Kiểm định ROI: bootstrap_roi_lower_95 > 0.0.
+  * Khi cả Tier 1 & Tier 2 PASS → Mới cho phép BET cược tiền thật.
 """
 from __future__ import annotations
 
@@ -17,14 +20,20 @@ from typing import Optional
 
 class EdgeGate:
     """
-    Kiểm tra Edge Gate trước khi cho phép đặt cược.
+    Kiểm tra Edge Gate 2 tầng (Dual-Tier) trước khi cho phép đặt cược.
 
-    Edge Gate PASS khi:
-    - bootstrap_roi_lower_95 > 0 (cận dưới ROI bootstrap 95% dương)
+    Tầng 1 (Statistical Model Gate):
+    - delta_brier_upper_95 < 0.0 (Cận trên CI95 của ΔBrier < 0, tức CI95 không chứa 0)
+    - ece_score <= 0.0800 (Mức hiệu chuẩn ECE chuẩn)
 
-    Khi FAIL:
-    - Tất cả quyết định BET → PAPER_TRADE
-    - Hệ thống vẫn dự báo, nhưng KHÔNG khuyến nghị đặt tiền.
+    Tầng 2 (Capital Execution Gate):
+    - roi_lower_95 > 0.0 (Cận dưới ROI bootstrap 95% dương)
+    - tier1_pass == True
+
+    Trạng thái:
+    - Tier 1 PASS, Tier 2 FAIL -> PAPER_TRADE_APPROVED (Tri thức thống kê OK, theo dõi giấy)
+    - Tier 1 PASS, Tier 2 PASS -> BET (Cược tiền thật)
+    - Tier 1 FAIL -> PAPER_TRADE (Chưa chứng minh được tín hiệu)
     """
 
     DEFAULT_POLICY_PATH = Path("predictions/evaluation_policy.json")
@@ -42,56 +51,72 @@ class EdgeGate:
                 self._policy = json.load(f)
             self._gate = self._policy.get("edge_gate", {})
         else:
-            self._gate = {"status": "PENDING", "roi_lower_95": None}
+            self._gate = {
+                "status": "PENDING",
+                "tier1_status": "PENDING",
+                "tier2_status": "PENDING",
+                "roi_lower_95": None,
+                "delta_brier_upper_95": None,
+                "ece_score": None,
+            }
 
     def check(self) -> dict:
         """
         Kiểm tra Edge Gate hiện tại.
 
         Returns:
-            dict với keys:
-            - pass (bool): True nếu gate passes
-            - status (str): "PASS" | "FAIL" | "PENDING"
-            - action (str): "BET" | "PAPER_TRADE" | "WATCH"
-            - roi_lower_95 (float | None): Cận dưới bootstrap 95%
-            - last_evaluated (str | None): Ngày đánh giá cuối
-            - evaluation_period (str | None): Kỳ đánh giá
-            - required (str): Tiêu chí yêu cầu
+            dict chứa thông tin trạng thái 2 tầng:
+            - pass (bool): True nếu CẢ 2 tầng đều PASS (Live BET)
+            - tier1_pass (bool): True nếu Tầng 1 PASS (Tri thức ML OK)
+            - tier2_pass (bool): True nếu Tầng 2 PASS (Vốn OK)
+            - status (str): "PASS" | "FAIL" | "PENDING" | "TIER1_PASS"
+            - action (str): "BET" | "PAPER_TRADE" | "PAPER_TRADE_APPROVED"
         """
         status = self._gate.get("status", "PENDING")
-        roi_lower = self._gate.get("roi_lower_95")
+        tier1_status = self._gate.get("tier1_status", "PENDING")
+        tier2_status = self._gate.get("tier2_status", "PENDING")
 
-        if status == "PASS":
-            return {
-                "pass": True,
-                "status": "PASS",
-                "action": "BET",
-                "roi_lower_95": roi_lower,
-                "last_evaluated": self._gate.get("last_evaluated"),
-                "evaluation_period": self._gate.get("evaluation_period"),
-                "required": self._gate.get("required", "bootstrap_roi_lower_95_gt_zero"),
-            }
-        elif status == "FAIL":
-            return {
-                "pass": False,
-                "status": "FAIL",
-                "action": "PAPER_TRADE",
-                "roi_lower_95": roi_lower,
-                "last_evaluated": self._gate.get("last_evaluated"),
-                "evaluation_period": self._gate.get("evaluation_period"),
-                "required": self._gate.get("required", "bootstrap_roi_lower_95_gt_zero"),
-            }
+        roi_lower = self._gate.get("roi_lower_95")
+        delta_brier_upper = self._gate.get("delta_brier_upper_95")
+        ece = self._gate.get("ece_score")
+        brier = self._gate.get("brier_score")
+
+        tier1_pass = tier1_status == "PASS"
+        tier2_pass = tier2_status == "PASS" or status == "PASS"
+
+        # Nếu chưa phân tầng trong JSON cũ nhưng status == "PASS"
+        if status == "PASS" and not tier1_pass:
+            tier1_pass = True
+
+        overall_pass = tier1_pass and tier2_pass
+
+        if overall_pass:
+            action = "BET"
+            effective_status = "PASS"
+        elif tier1_pass:
+            action = "PAPER_TRADE_APPROVED"
+            effective_status = "TIER1_PASS"
+        elif status == "FAIL" or tier1_status == "FAIL":
+            action = "PAPER_TRADE"
+            effective_status = "FAIL"
         else:
-            # PENDING — chưa đủ dữ liệu để đánh giá
-            return {
-                "pass": False,
-                "status": "PENDING",
-                "action": "PAPER_TRADE",
-                "roi_lower_95": None,
-                "last_evaluated": None,
-                "evaluation_period": None,
-                "required": self._gate.get("required", "bootstrap_roi_lower_95_gt_zero"),
-            }
+            action = "PAPER_TRADE"
+            effective_status = "PENDING"
+
+        return {
+            "pass": overall_pass,
+            "tier1_pass": tier1_pass,
+            "tier2_pass": tier2_pass,
+            "status": effective_status,
+            "action": action,
+            "roi_lower_95": roi_lower,
+            "delta_brier_upper_95": delta_brier_upper,
+            "ece_score": ece,
+            "brier_score": brier,
+            "last_evaluated": self._gate.get("last_evaluated"),
+            "evaluation_period": self._gate.get("evaluation_period"),
+            "required": self._gate.get("required", "tier1_delta_brier_ci95_gt_zero_and_tier2_roi_gt_zero"),
+        }
 
     def update(
         self,
@@ -101,34 +126,49 @@ class EdgeGate:
         total_bets: int,
         total_hits: int,
         roi: float,
+        delta_brier_upper_95: Optional[float] = None,
+        ece_score: Optional[float] = None,
+        brier_score: Optional[float] = None,
     ) -> dict:
         """
-        Cập nhật Edge Gate state sau khi có kết quả backtest mới.
+        Cập nhật trạng thái Edge Gate 2 tầng sau khi có kết quả đánh giá.
 
-        Args:
-            roi_lower_95: Cận dưới bootstrap 95% ROI
-            evaluation_period: Mô tả kỳ (VD: "2025-07-12 to 2026-07-15")
-            n_days: Số ngày backtest
-            total_bets: Tổng lượt cược
-            total_hits: Tổng nháy trúng
-            roi: ROI tổng
-
-        Returns:
-            dict: gate state sau cập nhật
+        Tier 1 PASS khi: delta_brier_upper_95 < 0.0 VÀ (ece_score is None hoặc ece_score <= 0.0800)
+        Tier 2 PASS khi: roi_lower_95 > 0.0 VÀ Tier 1 PASS
         """
         now_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-        passes = roi_lower_95 > 0.0
+
+        # Kiểm định Tầng 1 (Statistical Model Gate)
+        if delta_brier_upper_95 is not None:
+            t1_passes = (delta_brier_upper_95 < 0.0) and (ece_score is None or ece_score <= 0.0800)
+            tier1_status = "PASS" if t1_passes else "FAIL"
+        else:
+            tier1_status = "PENDING"
+            t1_passes = False
+
+        # Kiểm định Tầng 2 (Capital Execution Gate)
+        t2_passes = (roi_lower_95 > 0.0) and (t1_passes or delta_brier_upper_95 is None)
+        tier2_status = "PASS" if t2_passes else "FAIL"
+
+        overall_status = "PASS" if (t1_passes or delta_brier_upper_95 is None) and t2_passes else (
+            "TIER1_PASS" if t1_passes else "FAIL"
+        )
 
         self._gate = {
-            "status": "PASS" if passes else "FAIL",
+            "status": overall_status,
+            "tier1_status": tier1_status,
+            "tier2_status": tier2_status,
             "roi_lower_95": round(roi_lower_95, 6),
+            "delta_brier_upper_95": round(delta_brier_upper_95, 6) if delta_brier_upper_95 is not None else None,
+            "ece_score": round(ece_score, 6) if ece_score is not None else None,
+            "brier_score": round(brier_score, 6) if brier_score is not None else None,
             "roi": round(roi, 6),
             "n_days": n_days,
             "total_bets": total_bets,
             "total_hits": total_hits,
             "last_evaluated": now_str,
             "evaluation_period": evaluation_period,
-            "required": "bootstrap_roi_lower_95_gt_zero",
+            "required": "tier1_delta_brier_ci95_gt_zero_and_tier2_roi_gt_zero",
         }
 
         self._save_state()
@@ -137,13 +177,22 @@ class EdgeGate:
     def force_fail(self, reason: str = "manual_override") -> None:
         """Force Edge Gate về FAIL (dùng khi cần khóa manual)."""
         self._gate["status"] = "FAIL"
+        self._gate["tier1_status"] = "FAIL"
+        self._gate["tier2_status"] = "FAIL"
         self._gate["manual_override"] = reason
         self._gate["last_evaluated"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         self._save_state()
 
     def force_pending(self) -> None:
         """Reset Edge Gate về PENDING."""
-        self._gate = {"status": "PENDING", "roi_lower_95": None}
+        self._gate = {
+            "status": "PENDING",
+            "tier1_status": "PENDING",
+            "tier2_status": "PENDING",
+            "roi_lower_95": None,
+            "delta_brier_upper_95": None,
+            "ece_score": None,
+        }
         self._save_state()
 
     def _save_state(self) -> None:
@@ -158,3 +207,4 @@ class EdgeGate:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._path, "w", encoding="utf-8") as f:
             json.dump(self._policy, f, indent=2, ensure_ascii=False)
+
