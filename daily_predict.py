@@ -33,6 +33,7 @@ from probability import get_all_models
 from probability.count_expectation import EWMAHitCountChallenger
 from probability.lgb_model import LightGBMProbabilityModel
 from meta.fusion import MetaFusion
+from meta.regime_detector import RegimeDetector, MarketRegime
 from decision.engine import DecisionEngine
 from decision.edge_gate import EdgeGate
 from sklearn.calibration import CalibratedClassifierCV, FrozenEstimator
@@ -312,6 +313,11 @@ def run_shared_prediction_pipeline(
     else:
         fusion._weights = new_weights
     
+    # 4.3. Regime Detection & Adaptive Weight Boosting
+    regime_detector = RegimeDetector()
+    market_regime, regime_metrics = regime_detector.detect(S_hist, window_days=30)
+    fusion.apply_regime_boost(fusion._weights, market_regime, boost_factor=0.30)
+
     # Đồng bộ LGB đã hiệu chuẩn vào đầu vào fusion hôm nay
     model_probas[lgb_model.name] = calibrated_lgb_probs
     meta_proba = fusion.fuse(model_probas)
@@ -355,6 +361,8 @@ def run_shared_prediction_pipeline(
     day_decision.kelly_point_value_vnd = kelly_point_value_vnd
 
     decision_dict = day_decision.to_dict()
+    decision_dict["pipeline_metadata"]["market_regime"] = str(market_regime.value) if hasattr(market_regime, "value") else str(market_regime)
+    decision_dict["pipeline_metadata"]["regime_metrics"] = regime_metrics
 
     # Shadow challenger: dự báo E[số nháy], chỉ ghi log nghiên cứu và không đổi bets production.
     count_challenger = EWMAHitCountChallenger(top_k=top_k)

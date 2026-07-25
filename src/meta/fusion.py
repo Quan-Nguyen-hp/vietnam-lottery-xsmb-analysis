@@ -104,6 +104,37 @@ class MetaFusion:
 
         return np.clip(fused, 0.0, 1.0)
 
+    def apply_regime_boost(
+        self,
+        weights: dict[str, float],
+        regime: str,
+        boost_factor: float = 0.30,
+    ) -> dict[str, float]:
+        """
+        Điều chỉnh trọng số thích ứng theo Trạng thái Thị trường (Regime-Aware Weight Boosting).
+        """
+        if not weights:
+            return weights
+
+        regime_str = str(regime.value) if hasattr(regime, "value") else str(regime)
+        boosted = weights.copy()
+
+        if regime_str == "REPEAT":
+            for target in ("loto_repeat", "markov_chain"):
+                if target in boosted:
+                    boosted[target] *= (1.0 + boost_factor)
+        elif regime_str == "KHAN":
+            for target in ("max_delay", "poisson_estimator", "count_ewma_poisson"):
+                if target in boosted:
+                    boosted[target] *= (1.0 + boost_factor)
+
+        total_w = sum(boosted.values())
+        if total_w > 0:
+            boosted = {k: v / total_w for k, v in boosted.items()}
+
+        self._weights = boosted
+        return self._weights
+
     @property
     def weights(self) -> dict[str, float]:
         return self._weights
