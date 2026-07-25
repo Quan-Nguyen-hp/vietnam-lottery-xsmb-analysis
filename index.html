@@ -368,7 +368,10 @@
       </div>
     </header>
 
-    <!-- Stats summary grid -->
+    <!-- Stats summary section: Real vs Shadow -->
+    <div style="font-size: 0.95rem; font-weight: 700; color: var(--primary); margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+      <span>🛡️ TÀI KHOẢN TIỀN THẬT (ĐÃ QUA EDGE GATE)</span>
+    </div>
     <div class="grid-stats">
       <div class="card-stat">
         <div class="stat-label">Tổng lợi nhuận ròng</div>
@@ -389,6 +392,33 @@
         <div class="stat-label">Chuỗi Thắng/Thua</div>
         <div class="stat-value" id="val-streak">—</div>
         <div class="stat-change" id="val-streak-label">Chuỗi hiện tại</div>
+      </div>
+    </div>
+
+    <!-- Shadow Paper-Trade Parallel Stats -->
+    <div style="font-size: 0.95rem; font-weight: 700; color: var(--accent); margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+      <span>🧪 THEO DÕI SONG SONG SHADOW (PAPER-TRADE / CHƯA QUA EDGE GATE)</span>
+    </div>
+    <div class="grid-stats">
+      <div class="card-stat" style="border-color: rgba(245, 158, 11, 0.25); background: rgba(245, 158, 11, 0.03);">
+        <div class="stat-label">Lợi nhuận Shadow Giả lập</div>
+        <div class="stat-value" id="val-shadow-pnl">0đ</div>
+        <div class="stat-change" id="val-shadow-pnl-sub">Theo dõi trên giấy</div>
+      </div>
+      <div class="card-stat" style="border-color: rgba(245, 158, 11, 0.25); background: rgba(245, 158, 11, 0.03);">
+        <div class="stat-label">ROI Shadow Giả lập</div>
+        <div class="stat-value" id="val-shadow-roi">0.00%</div>
+        <div class="stat-change" style="color: var(--text-muted);">Tính trên số cược Shadow</div>
+      </div>
+      <div class="card-stat" style="border-color: rgba(245, 158, 11, 0.25); background: rgba(245, 158, 11, 0.03);">
+        <div class="stat-label">Thắng ngày Shadow</div>
+        <div class="stat-value" id="val-shadow-winrate">0%</div>
+        <div class="stat-change" id="val-shadow-win-count">0/0 ngày trúng nháy</div>
+      </div>
+      <div class="card-stat" style="border-color: rgba(245, 158, 11, 0.25); background: rgba(245, 158, 11, 0.03);">
+        <div class="stat-label">Chuỗi Shadow Hiện Tại</div>
+        <div class="stat-value" id="val-shadow-streak">—</div>
+        <div class="stat-change" id="val-shadow-streak-label">Chuỗi giả lập</div>
       </div>
     </div>
 
@@ -457,10 +487,11 @@
               <thead>
                 <tr>
                   <th>Ngày</th>
-                  <th>Số dự đoán</th>
-                  <th>Trúng</th>
+                  <th>Cược Thật (BET)</th>
+                  <th>Dàn Shadow (Paper-Trade)</th>
+                  <th>Trúng Shadow</th>
                   <th>Kết quả XSMB</th>
-                  <th>Lợi nhuận</th>
+                  <th>PnL Shadow (Giả lập)</th>
                 </tr>
               </thead>
               <tbody id="val-history-rows">
@@ -683,26 +714,79 @@
           rawContainer.style.display = 'none';
         }
 
-        // --- 2. Tính toán thống kê ---
+        // --- 2. Tính toán thống kê song song (Real Capital vs Shadow Paper-Trade) ---
         if (completed.length > 0) {
           let totalCost = 0;
           let totalRev = 0;
           let winDays = 0;
 
+          let shadowTotalCost = 0;
+          let shadowTotalRev = 0;
+          let shadowWinDays = 0;
+
+          const chartLabels = [];
+          const realChartData = [];
+          const shadowChartData = [];
+
+          let cumRealPnl = 0;
+          let cumShadowPnl = 0;
+
           completed.forEach(e => {
             const entryV12 = e.pipeline_metadata !== undefined;
-            const ePicks = entryV12 ? (e.bets ? e.bets.map(b => b.number) : []) : e.ensemble_picks;
-            
-            totalCost += e.cost_k || (ePicks.length * COST_PER_BET) || 0;
-            totalRev += e.revenue_k || 0;
-            if ((e.ensemble_hits || 0) > 0) winDays++;
+            const dateStr = entryV12 ? e.pipeline_metadata.date : e.date;
+
+            // 1. Cược Thật (Chỉ những lệnh decision === 'BET')
+            let realPicks = [];
+            if (entryV12 && e.bets) {
+              realPicks = e.bets.filter(b => b.decision === 'BET').map(b => b.number);
+            } else if (e.ensemble_picks) {
+              realPicks = e.ensemble_picks;
+            }
+            const realCost = e.cost_k || (realPicks.length * COST_PER_BET) || 0;
+            const realRev = realPicks.length > 0 ? (e.revenue_k || 0) : 0;
+            totalCost += realCost;
+            totalRev += realRev;
+            if (realPicks.length > 0 && (e.ensemble_hits || 0) > 0) winDays++;
+
+            // 2. Dàn Shadow Paper-Trade (Tất cả ứng viên trước Edge Gate)
+            let shadowPicks = [];
+            if (entryV12 && e.bets && e.bets.length > 0) {
+              shadowPicks = e.bets.map(b => b.number);
+            } else if (e.ensemble_proba) {
+              shadowPicks = e.ensemble_proba
+                .map((p, idx) => ({ number: idx, proba: p }))
+                .sort((a, b) => b.proba - a.proba)
+                .slice(0, 2)
+                .map(x => x.number);
+            } else if (e.ensemble_picks) {
+              shadowPicks = e.ensemble_picks;
+            }
+
+            // Đếm số nháy trúng thực tế của dàn Shadow
+            let shadowHits = 0;
+            if (Array.isArray(e.actual_results) && shadowPicks.length > 0) {
+              shadowHits = shadowPicks.reduce((acc, num) => acc + e.actual_results.filter(x => x === num).length, 0);
+            }
+            const shadowCost = shadowPicks.length * COST_PER_BET;
+            const shadowRev = shadowHits * PAYOUT_PER_HIT;
+            shadowTotalCost += shadowCost;
+            shadowTotalRev += shadowRev;
+            if (shadowHits > 0) shadowWinDays++;
+
+            // Tích luỹ PnL
+            cumRealPnl += (realRev - realCost);
+            cumShadowPnl += (shadowRev - shadowCost);
+
+            chartLabels.push(dateStr.substring(5));
+            realChartData.push(cumRealPnl * 1000);
+            shadowChartData.push(cumShadowPnl * 1000);
           });
 
+          // ── Cập nhật DOM Thống Kê Tiền Thật ─────────────────────────────
           const totalPnl = totalRev - totalCost;
           const roi = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
-          const winRate = (winDays / completed.length) * 100;
+          const winRate = completed.length > 0 ? (winDays / completed.length) * 100 : 0;
 
-          // Cập nhật DOM
           const pnlValEl = document.getElementById('val-total-pnl');
           pnlValEl.innerText = (totalPnl >= 0 ? '+' : '') + (totalPnl * 1000).toLocaleString('vi-VN') + 'đ';
           pnlValEl.style.color = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -717,11 +801,13 @@
           document.getElementById('val-winrate').innerText = winRate.toFixed(0) + '%';
           document.getElementById('val-win-count').innerText = `${winDays}/${completed.length} ngày trúng nháy`;
 
-          // Tính chuỗi
+          // Chuỗi Thật
           let streak = 0;
           let streakType = null;
           for (let i = completed.length - 1; i >= 0; i--) {
-            const hit = (completed[i].ensemble_hits || 0) > 0;
+            const e = completed[i];
+            const realPicks = (e.bets ? e.bets.filter(b => b.decision === 'BET').map(b => b.number) : e.ensemble_picks) || [];
+            const hit = realPicks.length > 0 && (e.ensemble_hits || 0) > 0;
             if (streakType === null) {
               streakType = hit ? 'W' : 'L';
               streak = 1;
@@ -734,66 +820,112 @@
           const streakValEl = document.getElementById('val-streak');
           streakValEl.innerText = streak + ' ngày';
           streakValEl.style.color = streakType === 'W' ? 'var(--success)' : 'var(--danger)';
-          streakValEl.style.fontWeight = '700';
-          document.getElementById('val-streak-label').innerText = 'Chuỗi ' + (streakType === 'W' ? 'thắng' : 'thua') + ' liên tiếp';
+          document.getElementById('val-streak-label').innerText = 'Chuỗi ' + (streakType === 'W' ? 'thắng' : 'thua') + ' hiện tại';
 
-          // --- 3. Vẽ biểu đồ PnL ---
-          let cumPnl = 0;
-          const chartLabels = [];
-          const chartData = [];
+          // ── Cập nhật DOM Thống Kê Shadow (Paper-Trade) ──────────────────
+          const shadowPnl = shadowTotalRev - shadowTotalCost;
+          const shadowRoi = shadowTotalCost > 0 ? (shadowPnl / shadowTotalCost) * 100 : 0;
+          const shadowWinRate = completed.length > 0 ? (shadowWinDays / completed.length) * 100 : 0;
 
-          completed.forEach(e => {
-            const entryV12 = e.pipeline_metadata !== undefined;
-            const ePicks = entryV12 ? (e.bets ? e.bets.map(b => b.number) : []) : e.ensemble_picks;
-            
-            const cost = e.cost_k || (ePicks.length * COST_PER_BET) || 0;
-            const rev = e.revenue_k || 0;
-            cumPnl += (rev - cost) / 1000; // scaling to points
-            
-            const dateStr = entryV12 ? e.pipeline_metadata.date : e.date;
-            chartLabels.push(dateStr.substring(5)); // MM-DD
-            chartData.push(cumPnl * 1000);
-          });
+          const shadowPnlEl = document.getElementById('val-shadow-pnl');
+          shadowPnlEl.innerText = (shadowPnl >= 0 ? '+' : '') + (shadowPnl * 1000).toLocaleString('vi-VN') + 'đ';
+          shadowPnlEl.style.color = shadowPnl >= 0 ? 'var(--accent)' : 'var(--danger)';
 
-          renderChart(chartLabels, chartData);
+          const shadowPnlSub = document.getElementById('val-shadow-pnl-sub');
+          shadowPnlSub.innerText = shadowPnl >= 0 ? '🟡 Đang có lãi giả lập' : '🔴 Âm vốn giả lập';
+          shadowPnlSub.style.color = shadowPnl >= 0 ? 'var(--accent)' : 'var(--danger)';
+
+          document.getElementById('val-shadow-roi').innerText = (shadowRoi >= 0 ? '+' : '') + shadowRoi.toFixed(2) + '%';
+          document.getElementById('val-shadow-roi').style.color = shadowRoi >= 0 ? 'var(--accent)' : 'var(--danger)';
+
+          document.getElementById('val-shadow-winrate').innerText = shadowWinRate.toFixed(0) + '%';
+          document.getElementById('val-shadow-win-count').innerText = `${shadowWinDays}/${completed.length} ngày trúng nháy`;
+
+          // Chuỗi Shadow
+          let shadowStreak = 0;
+          let shadowStreakType = null;
+          for (let i = completed.length - 1; i >= 0; i--) {
+            const e = completed[i];
+            let sPicks = [];
+            if (e.bets && e.bets.length > 0) sPicks = e.bets.map(b => b.number);
+            else if (e.ensemble_proba) sPicks = e.ensemble_proba.map((p, idx) => ({ number: idx, proba: p })).sort((a, b) => b.proba - a.proba).slice(0, 2).map(x => x.number);
+            else sPicks = e.ensemble_picks || [];
+
+            let sHits = 0;
+            if (Array.isArray(e.actual_results)) {
+              sHits = sPicks.reduce((acc, num) => acc + e.actual_results.filter(x => x === num).length, 0);
+            }
+            const hit = sHits > 0;
+            if (shadowStreakType === null) {
+              shadowStreakType = hit ? 'W' : 'L';
+              shadowStreak = 1;
+            } else if ((shadowStreakType === 'W' && hit) || (shadowStreakType === 'L' && !hit)) {
+              shadowStreak++;
+            } else {
+              break;
+            }
+          }
+          const shadowStreakValEl = document.getElementById('val-shadow-streak');
+          shadowStreakValEl.innerText = shadowStreak + ' ngày';
+          shadowStreakValEl.style.color = shadowStreakType === 'W' ? 'var(--accent)' : 'var(--danger)';
+          document.getElementById('val-shadow-streak-label').innerText = 'Chuỗi ' + (shadowStreakType === 'W' ? 'thắng' : 'thua') + ' giả lập';
+
+          // --- 3. Vẽ biểu đồ PnL Song Song (Real vs Shadow) ---
+          renderChart(chartLabels, realChartData, shadowChartData);
 
           // --- 4. Tạo bảng lịch sử (tối đa 10 dòng gần nhất) ---
           const historyBody = document.getElementById('val-history-rows');
           historyBody.innerHTML = '';
           
-          // Lấy 10 ngày gần nhất
           const recentLogs = [...completed].reverse().slice(0, 10);
           recentLogs.forEach(e => {
             const row = document.createElement('tr');
-            
             const entryV12 = e.pipeline_metadata !== undefined;
             const dateStr = entryV12 ? e.pipeline_metadata.date : e.date;
             
-            let ePicks = [];
+            // Real picks
+            let realPicks = [];
             if (entryV12 && e.bets) {
-              ePicks = e.bets.map(b => b.number);
+              realPicks = e.bets.filter(b => b.decision === 'BET').map(b => b.number);
             } else if (e.ensemble_picks) {
-              ePicks = e.ensemble_picks;
+              realPicks = e.ensemble_picks;
             }
-            
-            const picksStr = ePicks.length > 0 ? ePicks.map(n => String(n).padStart(2, '0')).join(', ') : 'SKIP (Không cược)';
-            const hits = e.ensemble_hits || 0;
-            const cost = e.cost_k || (ePicks.length * COST_PER_BET) || 0;
-            const pnl = e.pnl_k || ((e.revenue_k || 0) - cost);
-            
-            const badgeClass = hits > 0 ? 'pnl-plus' : (ePicks.length === 0 ? 'badge-gray' : 'pnl-minus');
-            const badgeText = hits > 0 ? `Trúng ${hits} nháy` : (ePicks.length === 0 ? 'SKIP' : 'Trượt');
-            
+            const realPicksStr = realPicks.length > 0 ? realPicks.map(n => String(n).padStart(2, '0')).join(', ') : 'SKIP';
+
+            // Shadow picks
+            let sPicks = [];
+            if (entryV12 && e.bets && e.bets.length > 0) {
+              sPicks = e.bets.map(b => b.number);
+            } else if (e.ensemble_proba) {
+              sPicks = e.ensemble_proba.map((p, idx) => ({ number: idx, proba: p })).sort((a, b) => b.proba - a.proba).slice(0, 2).map(x => x.number);
+            } else if (e.ensemble_picks) {
+              sPicks = e.ensemble_picks;
+            }
+            const sPicksStr = sPicks.length > 0 ? sPicks.map(n => String(n).padStart(2, '0')).join(', ') : '—';
+
+            // Hits & PnL Shadow
+            let sHits = 0;
+            if (Array.isArray(e.actual_results)) {
+              sHits = sPicks.reduce((acc, num) => acc + e.actual_results.filter(x => x === num).length, 0);
+            }
+            const sCost = sPicks.length * COST_PER_BET;
+            const sRev = sHits * PAYOUT_PER_HIT;
+            const sPnl = sRev - sCost;
+
+            const sBadgeClass = sHits > 0 ? 'pnl-plus' : (sPicks.length === 0 ? 'badge-gray' : 'pnl-minus');
+            const sBadgeText = sHits > 0 ? `Trúng ${sHits} nháy` : (sPicks.length === 0 ? '—' : 'Trượt');
+
             const uniqueActual = [...new Set(e.actual_results)].sort((a,b)=>a-b);
             const actualStr = uniqueActual.slice(0, 8).map(n => String(n).padStart(2, '0')).join(' ') + (uniqueActual.length > 8 ? '...' : '');
 
             row.innerHTML = `
               <td>${dateStr}</td>
-              <td style="font-weight: 500; font-family: monospace;">${picksStr}</td>
-              <td><span class="pnl-badge ${badgeClass}">${badgeText}</span></td>
+              <td style="font-weight: 600; font-family: monospace; color: var(--primary);">${realPicksStr}</td>
+              <td style="font-weight: 600; font-family: monospace; color: var(--accent);">${sPicksStr}</td>
+              <td><span class="pnl-badge ${sBadgeClass}">${sBadgeText}</span></td>
               <td style="font-family: monospace; font-size: 0.85rem; color: var(--text-muted);">${actualStr}</td>
-              <td style="font-weight: 600; color: ${pnl >= 0 ? 'var(--success)' : 'var(--danger)'}">
-                ${pnl >= 0 ? '+' : ''}${(pnl * 1000).toLocaleString('vi-VN')}đ
+              <td style="font-weight: 600; color: ${sPnl >= 0 ? 'var(--accent)' : 'var(--danger)'}">
+                ${sPnl >= 0 ? '+' : ''}${(sPnl * 1000).toLocaleString('vi-VN')}đ
               </td>
             `;
             historyBody.appendChild(row);
@@ -833,7 +965,7 @@
     }
 
     let pnlChartInstance = null;
-    function renderChart(labels, data) {
+    function renderChart(labels, realData, shadowData) {
       const ctx = document.getElementById('pnlChart').getContext('2d');
       if (pnlChartInstance) {
         pnlChartInstance.destroy();
@@ -843,23 +975,40 @@
         type: 'line',
         data: {
           labels: labels,
-          datasets: [{
-            label: 'Lợi nhuận cộng dồn (đ)',
-            data: data,
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
-            fill: true,
-            tension: 0.3,
-            borderWidth: 2,
-            pointRadius: 2,
-            pointHoverRadius: 5
-          }]
+          datasets: [
+            {
+              label: 'Cược Tiền Thật (đ)',
+              data: realData,
+              borderColor: '#8b5cf6',
+              backgroundColor: 'rgba(139, 92, 246, 0.08)',
+              fill: true,
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 3,
+              pointHoverRadius: 6
+            },
+            {
+              label: 'Theo Dõi Shadow (Paper-Trade) (đ)',
+              data: shadowData || [],
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245, 158, 11, 0.05)',
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 3,
+              pointHoverRadius: 6
+            }
+          ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { display: false }
+            legend: {
+              display: true,
+              labels: { color: '#94a3b8', font: { family: 'Outfit', size: 12 } }
+            }
           },
           scales: {
             x: {
