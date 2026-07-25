@@ -286,6 +286,8 @@ def run_xpis_backtest(
         # 1. Huấn luyện rolling, hiệu chuẩn và tính lại trọng số động.
         # Giống cấu trúc production; chu kỳ 30 ngày chỉ là tối ưu chi phí backtest.
         if step % RETRAIN_INTERVAL == 0:
+            import gc
+            gc.collect()
             print(f"🔄 Ngày {step}/{n_test_days} ({date_str}): Huấn luyện lại LGBM và cập nhật trọng số Fusion...")
             
             # Huấn luyện mô hình LGBM ở Layer 4
@@ -415,6 +417,7 @@ def run_xpis_backtest(
                     np.array(val_labels[CALIBRATION_FIT_DAYS:]),
                 )
             feature_store.clear_ram_cache()
+            gc.collect()
             
         # 2. Dự báo ngày hiện tại
         df_hist, S_hist = loader.slice_history(idx)

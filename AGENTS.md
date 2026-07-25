@@ -73,14 +73,17 @@ vietnam-lottery-xsmb-analysis/
 │   │   ├── day_of_week.py      # Model 8
 │   │   ├── bayesian.py         # Model 9
 │   │   ├── ewma_prob.py        # Model 10
-│   │   └── lgb_model.py        # Model 11 (LightGBM)
+│   │   ├── lgb_model.py        # Model 11 (LightGBM)
+│   │   └── count_poisson.py    # Model 12 (Poisson Expectation Hits)
 │   ├── meta/                   # L5 — Meta Learning Layer
 │   │   ├── base.py             # BaseMetaLearner (ABC)
-│   │   ├── fusion.py           # MetaFusion (dynamic weights)
+│   │   ├── fusion.py           # MetaFusion (dynamic weights & regime boost)
+│   │   ├── regime_detector.py  # RegimeDetector (REPEAT / KHAN / BALANCED)
 │   │   ├── calibration.py      # ProbabilityCalibrator (Platt/Isotonic)
 │   │   └── lightgbm_meta.py   # LightGBMMetaLearner (walk-forward)
 │   ├── decision/               # L6 — Decision Intelligence Layer
 │   │   ├── engine.py           # DecisionEngine, NumberDecision, DayDecision
+│   │   ├── edge_gate.py        # EdgeGate (Dual-tier: Tier 1 Brier/ECE + Tier 2 ROI)
 │   │   ├── confidence.py       # ConfidenceEngine
 │   │   ├── kelly.py            # KellyCriterion
 │   │   └── risk_filters.py     # RiskFilters (NMI correlation)
