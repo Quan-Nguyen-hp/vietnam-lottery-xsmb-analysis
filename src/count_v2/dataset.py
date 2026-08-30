@@ -63,8 +63,6 @@ def raw_draw_batch_from_frame(
             date_str = str(val)
         date_strings.append(canonical_date(date_str, field_name=f"{date_column}[{i}]"))
 
-    dates_arr = np.asarray(date_strings, dtype="<U10")
-
     # Draw extraction & validation
     draws_subset = frame[list(draw_columns)]
 
@@ -77,27 +75,7 @@ def raw_draw_batch_from_frame(
     if pd.isna(draws_vals).any():
         raise DatasetValidationError("null draw detected in frame")
 
-    if not np.issubdtype(draws_vals.dtype, np.integer):
-        if np.issubdtype(draws_vals.dtype, np.floating):
-            if not np.all(np.isfinite(draws_vals)) or not np.all(draws_vals == np.floor(draws_vals)):
-                raise DatasetValidationError("non-integer draw value detected in frame")
-        elif not np.issubdtype(draws_vals.dtype, np.number):
-            # Check if strings or objects can be parsed to integers without fraction
-            try:
-                draws_vals = draws_vals.astype(np.float64)
-                if not np.all(np.isfinite(draws_vals)) or not np.all(draws_vals == np.floor(draws_vals)):
-                    raise DatasetValidationError("non-integer draw value detected in frame")
-            except (ValueError, TypeError) as err:
-                raise DatasetValidationError(
-                    f"non-integer draw value detected in frame: {err}"
-                ) from err
-
-    draws_arr = draws_vals.astype(np.int16)
-
-    if np.any(draws_arr < 0) or np.any(draws_arr > 99):
-        raise DatasetValidationError("draw numbers must be in the range [0, 99]")
-
-    return RawDrawBatch(dates=dates_arr, draws=draws_arr)
+    return RawDrawBatch(dates=date_strings, draws=draws_vals)
 
 
 def count_matrix_from_raw(batch: RawDrawBatch) -> np.ndarray:

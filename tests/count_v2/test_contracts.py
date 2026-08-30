@@ -97,6 +97,86 @@ def test_raw_draw_batch_rejects_invalid_inputs():
         )
 
 
+def test_raw_draw_batch_rejects_integer_overflow_values():
+    with pytest.raises(DatasetValidationError):
+        RawDrawBatch(
+            dates=["2026-01-01"],
+            draws=np.full((1, 27), 65536, dtype=np.int64),
+        )
+    with pytest.raises(DatasetValidationError):
+        RawDrawBatch(
+            dates=["2026-01-01"],
+            draws=np.full((1, 27), 65536.0, dtype=np.float64),
+        )
+
+
+def test_raw_draw_batch_accepts_valid_boundary_values():
+    draws = np.zeros((2, 27), dtype=np.int64)
+    draws[0] = 0
+    draws[1] = 99
+    batch = RawDrawBatch(dates=["2026-01-01", "2026-01-02"], draws=draws)
+    assert np.all(batch.draws[0] == 0)
+    assert np.all(batch.draws[1] == 99)
+    assert batch.draws.dtype == np.int16
+
+
+def test_validated_int_array_rejects_boolean_values():
+    with pytest.raises(DatasetValidationError):
+        RawDrawBatch(
+            dates=["2026-01-01"],
+            draws=np.full((1, 27), True),
+        )
+
+
+def test_from_dict_rejects_lossy_and_fractional_draws():
+    with pytest.raises(DatasetValidationError):
+        RawDrawBatch.from_dict({
+            "dates": ["2026-01-01"],
+            "draws": [[1.5] * 27],
+        })
+
+
+def test_count_history_from_dict_rejects_fractional_counts():
+    # 27 entries of 1.5 + 73 entries of 0
+    with pytest.raises(DatasetValidationError):
+        CountHistory.from_dict({
+            "dates": ["2026-01-01"],
+            "counts": [[1.5] * 27 + [0] * 73],
+        })
+
+
+def test_count_outcome_from_dict_rejects_fractional_counts():
+    with pytest.raises(DatasetValidationError):
+        CountOutcome.from_dict({
+            "target_date": "2026-01-05",
+            "observed_counts": [1.5] * 27 + [0] * 73,
+        })
+
+
+def test_dates_vector_validation_rejects_truncated_dates():
+    with pytest.raises(DatasetValidationError):
+        RawDrawBatch(
+            dates=["2026-01-011"],
+            draws=np.zeros((1, 27), dtype=np.int16),
+        )
+    with pytest.raises(DatasetValidationError):
+        RawDrawBatch(
+            dates=["2026-01-01extra"],
+            draws=np.zeros((1, 27), dtype=np.int16),
+        )
+    with pytest.raises(DatasetValidationError):
+        RawDrawBatch.from_dict({
+            "dates": ["2026-01-011"],
+            "draws": [[0] * 27],
+        })
+    with pytest.raises(DatasetValidationError):
+        CountHistory.from_dict({
+            "dates": ["2026-01-011"],
+            "counts": [make_count_row(list(range(27))).tolist()],
+        })
+
+
+
 def test_count_history_construction_and_serialization():
     dates = np.array(["2026-01-01", "2026-01-03"], dtype="<U10")
     counts = np.vstack([

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import datetime
 import numbers
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 FORECAST_SUM_TOLERANCE: float = 1e-6
 
@@ -61,20 +62,34 @@ def require_target_after_history(history: CountHistory, target_date: str) -> str
 
 
 def _validate_dates_vector(dates: Any, field_name: str) -> np.ndarray:
-    if isinstance(dates, (list, tuple)):
-        dates = np.asarray(dates, dtype="<U10")
-    elif not isinstance(dates, np.ndarray):
+    if isinstance(dates, (str, bytes, Mapping)):
         raise DatasetValidationError(
-            f"Expected array or list for '{field_name}', got {type(dates).__name__}"
+            f"Expected array or sequence for '{field_name}', got {type(dates).__name__}"
         )
 
-    if dates.ndim != 1:
+    if isinstance(dates, np.ndarray):
+        if dates.ndim != 1:
+            raise DatasetValidationError(
+                f"'{field_name}' must be a 1D array, got shape {dates.shape}"
+            )
+        raw_list = dates.tolist()
+    elif isinstance(dates, Sequence):
+        raw_list = list(dates)
+    else:
         raise DatasetValidationError(
-            f"'{field_name}' must be a 1D array, got shape {dates.shape}"
+            f"Expected array or sequence for '{field_name}', got {type(dates).__name__}"
         )
 
-    canonical_list = [canonical_date(d, field_name=f"{field_name}[{i}]") for i, d in enumerate(dates)]
+    canonical_list = [
+        canonical_date(d, field_name=f"{field_name}[{i}]")
+        for i, d in enumerate(raw_list)
+    ]
     arr = np.asarray(canonical_list, dtype="<U10")
+
+    if arr.ndim != 1:
+        raise DatasetValidationError(
+            f"'{field_name}' must be a 1D array, got shape {arr.shape}"
+        )
 
     if len(arr) > 1:
         if np.any(arr[:-1] >= arr[1:]):
@@ -95,50 +110,83 @@ def _validated_int_array(
     min_val: int | None = None,
     max_val: int | None = None,
 ) -> np.ndarray:
-    if isinstance(data, (list, tuple)):
-        data = np.asarray(data)
-    elif not isinstance(data, np.ndarray):
+    if isinstance(data, (str, bytes, Mapping)):
         raise DatasetValidationError(
-            f"Expected array or list for '{field_name}', got {type(data).__name__}"
+            f"Expected array or sequence for '{field_name}', got {type(data).__name__}"
         )
 
-    if data.ndim != expected_dim:
-        raise DatasetValidationError(
-            f"'{field_name}' must have {expected_dim} dimensions, got shape {data.shape}"
-        )
-
-    if expected_dim == 1 and data.shape[0] != expected_last_dim:
-        raise DatasetValidationError(
-            f"'{field_name}' must have shape ({expected_last_dim},), got {data.shape}"
-        )
-    elif expected_dim == 2 and data.shape[1] != expected_last_dim:
-        raise DatasetValidationError(
-            f"'{field_name}' must have shape (N, {expected_last_dim}), got {data.shape}"
-        )
-
-    if not np.issubdtype(data.dtype, np.integer):
-        # Check if all elements are integer-valued floats without fractions or NaNs
-        if np.issubdtype(data.dtype, np.floating) and np.all(np.isfinite(data)) and np.all(data == np.floor(data)):
-            data = data.astype(np.int16)
-        else:
-            raise DatasetValidationError(
-                f"'{field_name}' must contain integer values, got dtype {data.dtype}"
-            )
+    if isinstance(data, np.ndarray):
+        arr = data
+    elif isinstance(data, (list, tuple, Sequence)):
+        arr = np.asarray(data)
     else:
-        data = data.astype(np.int16)
+        raise DatasetValidationError(
+            f"Expected array or sequence for '{field_name}', got {type(data).__name__}"
+        )
 
-    if min_val is not None and np.any(data < min_val):
+    if arr.ndim != expected_dim:
+        raise DatasetValidationError(
+            f"'{field_name}' must have {expected_dim} dimensions, got shape {arr.shape}"
+        )
+
+    if expected_dim == 1 and arr.shape[0] != expected_last_dim:
+        raise DatasetValidationError(
+            f"'{field_name}' must have shape ({expected_last_dim},), got {arr.shape}"
+        )
+    elif expected_dim == 2 and arr.shape[1] != expected_last_dim:
+        raise DatasetValidationError(
+            f"'{field_name}' must have shape (N, {expected_last_dim}), got {arr.shape}"
+        )
+
+    # 1. Reject boolean dtype
+    if arr.dtype == bool or np.issubdtype(arr.dtype, np.bool_):
+        raise DatasetValidationError(
+            f"'{field_name}' must contain integer values, got boolean"
+        )
+
+    # 2. Check object arrays for booleans, nulls, non-integers
+    if arr.dtype == object:
+        for x in arr.flat:
+            if isinstance(x, bool) or not isinstance(x, (numbers.Integral, numbers.Real)) or pd.isna(x):
+                raise DatasetValidationError(
+                    f"'{field_name}' must contain integer values, got {type(x).__name__}"
+                )
+            if isinstance(x, numbers.Real) and not isinstance(x, numbers.Integral):
+                if not np.isfinite(x) or x != int(x):
+                    raise DatasetValidationError(
+                        f"'{field_name}' must contain integer values, got non-integral value {x}"
+                    )
+        arr = arr.astype(np.float64)
+
+    # 3. Check numeric array null / nonfinite / integrality
+    if np.issubdtype(arr.dtype, np.floating):
+        if not np.all(np.isfinite(arr)):
+            raise DatasetValidationError(
+                f"'{field_name}' contains NaN or infinite values"
+            )
+        if not np.all(arr == np.floor(arr)):
+            raise DatasetValidationError(
+                f"'{field_name}' must contain integer values, got floating point with fraction"
+            )
+    elif not np.issubdtype(arr.dtype, np.integer):
+        raise DatasetValidationError(
+            f"'{field_name}' must contain integer values, got dtype {arr.dtype}"
+        )
+
+    # 4. Range validation BEFORE casting / narrowing
+    if min_val is not None and np.any(arr < min_val):
         raise DatasetValidationError(
             f"'{field_name}' contains values < {min_val}"
         )
-    if max_val is not None and np.any(data > max_val):
+    if max_val is not None and np.any(arr > max_val):
         raise DatasetValidationError(
             f"'{field_name}' contains values > {max_val}"
         )
 
-    data = data.copy()
-    data.setflags(write=False)
-    return data
+    # 5. Safe narrowing cast
+    res = arr.astype(np.int16, copy=True)
+    res.setflags(write=False)
+    return res
 
 
 def _validated_float_vector(
@@ -209,8 +257,8 @@ class RawDrawBatch:
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> RawDrawBatch:
         return cls(
-            dates=np.asarray(payload["dates"], dtype="<U10"),
-            draws=np.asarray(payload["draws"], dtype=np.int16),
+            dates=payload["dates"],
+            draws=payload["draws"],
         )
 
 
@@ -251,8 +299,8 @@ class CountHistory:
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> CountHistory:
         return cls(
-            dates=np.asarray(payload["dates"], dtype="<U10"),
-            counts=np.asarray(payload["counts"], dtype=np.int16),
+            dates=payload["dates"],
+            counts=payload["counts"],
         )
 
 
@@ -289,8 +337,8 @@ class CountOutcome:
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> CountOutcome:
         return cls(
-            target_date=str(payload["target_date"]),
-            observed_counts=np.asarray(payload["observed_counts"], dtype=np.int16),
+            target_date=payload["target_date"],
+            observed_counts=payload["observed_counts"],
         )
 
 

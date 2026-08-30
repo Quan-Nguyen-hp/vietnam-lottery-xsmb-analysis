@@ -102,6 +102,19 @@ def test_out_of_range_draw_values_rejected():
         raw_draw_batch_from_frame(frame_high, draw_columns=DRAW_COLUMNS)
 
 
+def test_raw_draw_batch_from_frame_rejects_overflow_values():
+    frame = make_frame(["2026-01-01"])
+    frame.loc[0, DRAW_COLUMNS[0]] = 65536
+    with pytest.raises(DatasetValidationError):
+        raw_draw_batch_from_frame(frame, draw_columns=DRAW_COLUMNS)
+
+    frame_float = make_frame(["2026-01-01"])
+    frame_float.loc[0, DRAW_COLUMNS[0]] = 65536.0
+    with pytest.raises(DatasetValidationError):
+        raw_draw_batch_from_frame(frame_float, draw_columns=DRAW_COLUMNS)
+
+
+
 def test_date_chronology_and_duplicates_rejected():
     frame_desc = make_frame(["2026-01-02", "2026-01-01"])
     with pytest.raises(DatasetValidationError):
