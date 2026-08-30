@@ -311,3 +311,110 @@ def test_main_cli_execution_with_custom_artifact_root(tmp_path, monkeypatch):
     assert exit_code == 0
     assert (tmp_path / "CLI_RUN_001" / "summary.json").exists()
     assert (tmp_path / "CLI_RUN_001" / "forecasts.npz").exists()
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+PROHIBITED_CORE_PREFIXES = (
+    "src.data",
+    "data",
+    "src.probability",
+    "src.meta",
+    "src.decision",
+    "src.features",
+    "src.evidence",
+    "src.registry",
+    "predictions",
+)
+ALLOWED_EXTERNAL_ROOTS = frozenset({"numpy", "pandas"})
+
+
+def collect_core_import_violations(source: str, filename: str) -> list[str]:
+    import ast
+
+    tree = ast.parse(source, filename=filename)
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports = [
+                (alias.name, alias.name.rsplit(".", 1)[-1]) for alias in node.names
+            ]
+        elif isinstance(node, ast.ImportFrom):
+            if node.level > 0:
+                continue
+            imports = [(node.module or "", alias.name) for alias in node.names]
+        else:
+            continue
+        for module, symbol in imports:
+            if symbol == "DataLoader":
+                violations.append(f"{filename}: prohibited symbol DataLoader")
+            if any(
+                module == prefix or module.startswith(prefix + ".")
+                for prefix in PROHIBITED_CORE_PREFIXES
+            ):
+                violations.append(f"{filename}: prohibited module {module}")
+                continue
+            root = module.split(".", 1)[0]
+            if (
+                module.startswith("src.count_v2")
+                or root in ALLOWED_EXTERNAL_ROOTS
+                or root in sys.stdlib_module_names
+            ):
+                continue
+            violations.append(f"{filename}: unapproved external module {module}")
+    return violations
+
+
+def test_import_guard_detects_prohibited_loader_import():
+    source = "from src.data.loader import DataLoader\n"
+    violations = collect_core_import_violations(source, "synthetic_loader.py")
+    assert "synthetic_loader.py: prohibited module src.data.loader" in violations
+    assert "synthetic_loader.py: prohibited symbol DataLoader" in violations
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import data\n",
+        "import data.loader\n",
+        "import src.probability\n",
+        "import src.meta\n",
+        "import src.decision\n",
+        "import src.features\n",
+        "import src.evidence\n",
+        "import src.registry\n",
+        "import predictions\n",
+        "import sklearn\n",
+    ],
+)
+def test_import_guard_rejects_legacy_and_unapproved_external_modules(source: str):
+    assert collect_core_import_violations(source, "synthetic_external.py")
+
+
+def test_count_v2_core_has_no_prohibited_imports():
+    violations: list[str] = []
+    for path in sorted((ROOT_DIR / "src" / "count_v2").rglob("*.py")):
+        violations.extend(
+            collect_core_import_violations(path.read_text(encoding="utf-8"), str(path))
+        )
+    assert violations == []
+
+
+def test_research_adapter_is_the_only_loader_boundary_and_never_reads_binary_s():
+    import ast
+
+    path = ROOT_DIR / "backtests" / "count_v2_research.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    loader_imports = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "src.data.loader"
+        and [alias.name for alias in node.names] == ["DataLoader"]
+    ]
+    binary_s_reads = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and node.attr == "S"
+    ]
+    assert len(loader_imports) == 1
+    assert binary_s_reads == []
