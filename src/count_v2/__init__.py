@@ -20,6 +20,7 @@ from src.count_v2.dataset import (
 )
 from src.count_v2.models import (
     CountModel,
+    EWMACountModel,
     RollingCountModel,
     UniformCountModel,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "count_outcome_for_date",
     "raw_draw_batch_from_frame",
     "CountModel",
+    "EWMACountModel",
     "RollingCountModel",
     "UniformCountModel",
 ]

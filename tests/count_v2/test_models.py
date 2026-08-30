@@ -9,6 +9,7 @@ from src.count_v2.contracts import (
 )
 from src.count_v2.models import (
     CountModel,
+    EWMACountModel,
     RollingCountModel,
     UniformCountModel,
 )
@@ -101,3 +102,68 @@ def test_rolling_model_validates_window_and_history_length():
     model = RollingCountModel(window=2)
     with pytest.raises(ChronologyError, match="fewer rows than window"):
         model.predict_count(history, "2026-01-02")
+
+
+def test_ewma_uses_finite_normalized_row_weights_and_finite_neff():
+    model = EWMACountModel(half_life=2.0)
+    assert isinstance(model, CountModel)
+    assert model.model_identity == "M1_EWMA_H2_DEVELOPMENT"
+    assert model.EVIDENCE_CLASS == "DEVELOPMENT / EXPLORATORY"
+    assert model.MEAN_SEMANTICS == "DEVELOPMENT_ONLY_POISSON_MEAN_APPROXIMATION"
+
+    weights = model.normalized_weights(history_rows=3)
+    expected = np.exp(-np.log(2.0) * np.array([2.0, 1.0, 0.0]) / 2.0)
+    expected /= expected.sum()
+    np.testing.assert_allclose(weights, expected)
+    assert np.isclose(weights.sum(), 1.0)
+    assert weights[2] > weights[1] > weights[0]  # latest has largest weight
+
+    neff = model.effective_sample_size(3)
+    assert np.isclose(neff, 1.0 / np.sum(expected**2))
+    assert np.isfinite(neff)
+
+
+def test_ewma_model_prediction_and_uncertainty():
+    history = history_from_draw_rows(
+        ["2026-01-01", "2026-01-04", "2026-02-10"],
+        [[1] * 27, [2] * 27, [3] * 27],
+    )
+    model = EWMACountModel(half_life=2.0)
+    forecast = model.predict_count(history, "2026-03-01")
+
+    assert forecast.target_date == "2026-03-01"
+    assert forecast.history_start == "2026-01-01"
+    assert forecast.history_end == "2026-02-10"
+    assert forecast.expected_count.shape == (100,)
+    assert np.isclose(forecast.expected_count.sum(), 27.0)
+
+    weights = model.normalized_weights(3)
+    expected_calc = weights @ history.counts.astype(np.float64)
+    np.testing.assert_allclose(forecast.expected_count, expected_calc)
+
+    neff = model.effective_sample_size(3)
+    assert forecast.mean_standard_error is not None
+    np.testing.assert_allclose(forecast.mean_standard_error, np.sqrt(expected_calc / neff))
+    assert forecast.predictive_distribution is None
+    assert forecast.prediction_interval is None
+
+
+def test_ewma_model_parameter_validation():
+    with pytest.raises(ValueError, match="half_life"):
+        EWMACountModel(half_life=0.0)
+    with pytest.raises(ValueError, match="half_life"):
+        EWMACountModel(half_life=-1.5)
+    with pytest.raises(ValueError, match="half_life"):
+        EWMACountModel(half_life=np.nan)
+    with pytest.raises(ValueError, match="half_life"):
+        EWMACountModel(half_life=np.inf)
+    with pytest.raises(ValueError, match="half_life"):
+        EWMACountModel(half_life=True)  # type: ignore
+
+    model = EWMACountModel(half_life=5.0)
+    with pytest.raises(ValueError, match="history_rows"):
+        model.normalized_weights(0)
+    with pytest.raises(ValueError, match="history_rows"):
+        model.normalized_weights(-1)
+    with pytest.raises(ValueError, match="history_rows"):
+        model.normalized_weights(True)  # type: ignore

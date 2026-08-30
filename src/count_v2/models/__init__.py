@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from src.count_v2.contracts import CountForecast, CountHistory
+from src.count_v2.models.ewma import EWMACountModel
 from src.count_v2.models.rolling import RollingCountModel
 from src.count_v2.models.uniform import UniformCountModel
 
@@ -21,6 +22,7 @@ class CountModel(Protocol):
 
 __all__ = [
     "CountModel",
+    "EWMACountModel",
     "RollingCountModel",
     "UniformCountModel",
 ]
