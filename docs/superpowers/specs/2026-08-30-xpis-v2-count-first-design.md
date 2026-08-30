@@ -1,6 +1,6 @@
 # XPIS v2 Count-First Research Subsystem — Architecture & Statistical Design Specification
 
-- **Document Version**: 2.0.0-PROPOSED
+- **Document Version**: 2.1.0-REVISED
 - **Date**: 2026-08-30
 - **Status**: DESIGN SPECIFICATION (LOCKED FOR CHATGPT CONTROL PLANE REVIEW)
 - **Authoring Agent**: Repositorially Grounded Design Spec Author (Gemini 3.7 Flash, Reasoning: High)
@@ -22,7 +22,9 @@ $$\text{Does stable predictive information exist in the occurrence-count target 
 XPIS v2 reformulates lottery forecasting from binary occurrence classification ($S \in \{0, 1\}$) to direct integer count modeling ($C \in \{0, 1, 2, \dots, 27\}$). This transition aligns the mathematical modeling domain with the physical draw generation process of Northern Vietnam Lottery (XSMB), which produces 27 prize numbers each day across 100 possible two-digit outcomes (00–99).
 
 ### 1.2 Scope & Non-Goals
-The initial research slice (Slice 1) is exclusively an exploratory and confirmatory research framework. It is explicitly **NOT** intended to build a full production prediction system, a betting engine, or a replacement decision system for live operations.
+Slice 1 is exclusively a **Development / Exploratory Count Research Core** (`SLICE_1 = DEVELOPMENT / EXPLORATORY COUNT RESEARCH CORE`). Its implementation scope is strictly confined to minimal count contracts, dataset validation, initial baselines/models, an exploratory research adapter, and correctness unit testing.
+
+While this architecture document defines the requirements for future confirmatory trials, Slice 1 itself does **NOT** implement the full confirmatory ledger, remote receipt timestamping, or prospective execution framework.
 
 Explicitly forbidden and deferred in Slice 1:
 - **NO** LightGBM classification or regression models.
@@ -83,7 +85,7 @@ Slice 1 restricts the model portfolio to exactly two baselines and two primary c
 B0: Uniform Count Baseline
 B1: Rolling Count Baseline
 M1: Exponentially Weighted Moving Average (EWMA) Count Model
-M2: Dirichlet-Shrinkage Multinomial Count Model
+M2: Dirichlet-Shrinkage Multinomial Model
 ```
 
 ### 3.1 Model B0: Uniform Count Baseline
@@ -103,7 +105,7 @@ $$\hat{\mu}_{\text{B1}}[t, n; W] = \frac{1}{W} \sum_{i=1}^{W} C[t - i, n]$$
 
 $$\sum_{n=0}^{99} \hat{\mu}_{\text{B1}}[t, n; W] = \frac{1}{W} \sum_{i=1}^{W} \sum_{n=0}^{99} C[t - i, n] = \frac{1}{W} \sum_{i=1}^{W} 27 = 27.0$$
 
-- **Development Parameter**: Window size $W \in \mathbb{N}$ (e.g., $W \in \{30, 90, 180, 365\}$). The exact confirmatory window must be frozen during preregistration.
+- **Development Parameter**: Window size $W \in \mathbb{N}$. The exact window size for confirmatory comparison is evaluated during development and frozen in `preregistration.json` prior to confirmatory execution.
 
 ### 3.3 Model M1: EWMA Count Model
 An exponentially weighted moving average count estimator with smoothing parameter $\alpha = 1 - \exp(-\ln(2) / H)$ corresponding to half-life $H > 0$ draw days:
@@ -115,7 +117,7 @@ In practical finite histories of length $K$, weights are normalized:
 $$w_k = (1 - \alpha)^k, \quad \tilde{w}_k = \frac{w_k}{\sum_{j=0}^{K-1} w_j}, \quad \hat{\mu}_{\text{M1}}[t, n; H] = \sum_{k=0}^{K-1} \tilde{w}_k C[t - 1 - k, n]$$
 
 - **Sum Invariant**: $\sum_{n=0}^{99} \hat{\mu}_{\text{M1}}[t, n; H] = \sum_{k=0}^{K-1} \tilde{w}_k (27) = 27.0$.
-- **Development Parameter**: Half-life $H > 0$ (e.g., $H = 90$). Frozen during preregistration.
+- **Development Parameter**: Half-life $H > 0$. The exact half-life is evaluated during development and frozen in `preregistration.json` prior to confirmatory execution.
 
 ### 3.4 Model M2: Dirichlet-Shrinkage Multinomial Model
 A Bayesian count model treating the 27 daily draws as generated from a categorical distribution parameterized by simplex probabilities $\mathbf{p}_t = (p_{t, 0}, \dots, p_{t, 99})$ with $\sum_{n=0}^{99} p_{t, n} = 1$:
@@ -129,7 +131,7 @@ $$\text{Posterior Mean: } \mathbb{E}[p_{t, n} \mid \text{data}] = \frac{\alpha_{
 $$\hat{\mu}_{\text{M2}}[t, n; W, \beta] = 27 \times \mathbb{E}[p_{t, n} \mid \text{data}]$$
 
 - **Semantics**: Posterior mean probabilities scaled by total daily draw count 27.
-- **Explicit Clarification**: M2 does **NOT** require or assume that the true empirical data-generating process is an overdispersed Dirichlet-Multinomial process; it is strictly a shrinkage estimator over multinomial state probabilities.
+- **Explicit Clarification**: M2 is strictly a Dirichlet-shrinkage Multinomial estimator over multinomial state probabilities. It does **NOT** assume or require that the true empirical data-generating process follows an overdispersed Dirichlet-Multinomial distribution.
 
 ---
 
@@ -220,7 +222,7 @@ tests/
         test_research_adapter.py
 ```
 
-*(Note: These files represent the intended Slice 1 scope and are NOT created during this design spec gate).*
+*(Note: These files represent the intended Slice 1 development scope and are NOT created during design spec gates).*
 
 ---
 
@@ -258,7 +260,7 @@ class CountForecast:
     history_start: str         # Earliest date in model-visible history
     history_end: str           # Latest date in model-visible history (strictly < target_date)
     expected_count: np.ndarray # Shape: (100,), float64, sum == 27.0 +/- 1e-6
-    model_identity: str        # e.g., 'M1_EWMA_HL90'
+    model_identity: str        # e.g., Model identifier string
     mean_standard_error: Optional[np.ndarray] = None # Shape: (100,), SE of estimated mean
     mean_lower_bound: Optional[np.ndarray] = None    # Shape: (100,), LCB of mean
     mean_upper_bound: Optional[np.ndarray] = None    # Shape: (100,), UCB of mean
@@ -328,7 +330,7 @@ A point forecast of expected count does **NOT** universally imply binary hit pro
 
 $$P(C[t, n] > 0) \ne 1 - \exp(-\hat{\mu}_t[n]) \quad \text{(in general)}$$
 
-The transformation $P(C > 0) = 1 - e^{-\mu}$ is mathematically exact **only** if the marginal count distribution is strictly Poisson. Because lottery draws are drawn without replacement in clusters across prize tiers, empirical marginal distributions may exhibit sub-Poisson or multi-state characteristics.
+The count data permits repeated two-digit outcomes within one date ($C[t, n] > 1$). The transformation $P(C > 0) = 1 - e^{-\mu}$ is mathematically exact **only** if the marginal count distribution is strictly Poisson. Because the draw process generates 27 total outcomes satisfying $\sum_{n=0}^{99} C[t, n] = 27$, the expected-count mean alone does not determine the full marginal predictive distribution, and empirical marginal count distributions may exhibit multi-state or departure from Poisson characteristics.
 
 ### 8.3 Distributional Probability Exposure Policy
 A model may expose an exceedance probability $P(C[t, n] > 0)$ **only if** that model provides an explicit, theoretically justified, and preregistered predictive distribution $\mathcal{P}_n(c)$. In all other cases, models remain strictly point-mean count estimators.
@@ -341,7 +343,7 @@ To avoid statistical conflation, the design rigorously distinguishes between two
 
 $$\begin{aligned}
 \text{Uncertainty of Conditional Mean: } & \text{SE}(\hat{\mu}_t[n]) = \sqrt{\text{Var}\left(\hat{\mu}_t[n] \mid \mathcal{H}_{<t}\right)} \\
-\text{Predictive Observation Uncertainty: } & \text{Var}(C[t, n] \mid \mathcal{H}_{<t}) \approx \mu_t[n]
+\text{Predictive Observation Uncertainty: } & \text{Dispersion of discrete draws } C[t, n] \sim \mathcal{P}_{t, n}(c)
 \end{aligned}$$
 
 A single ambiguous standard deviation $\sigma$ must **NEVER** be used.
@@ -350,22 +352,22 @@ A single ambiguous standard deviation $\sigma$ must **NEVER** be used.
 +-----------------------------------------------------------------------------+
 |                            UNCERTAINTY TAXONOMY                             |
 +-----------------------------------------------------------------------------+
-|  1. ESTIMATOR UNCERTAINTY (SE of Mean)                                      |
+|  1. ESTIMATOR UNCERTAINTY (SE of Estimated Conditional Mean)                |
 |     - Measures statistical sampling error of the estimated parameter \mu   |
 |     - Approaches 0 as sample size N -> \infty                               |
 |     - Used for LCB selection rules: LCB_n = \hat{\mu}_n - z * SE(\hat{\mu}_n)|
 +-----------------------------------------------------------------------------+
 |  2. PREDICTIVE UNCERTAINTY (Observation Dispersion)                         |
-|     - Measures intrinsic randomness of the next discrete draw C[t, n]       |
-|     - Non-zero even with infinite historical data (\approx \mu)             |
-|     - Used for prediction intervals: [0, \hat{\mu}_n + z * \sqrt{\mu_n}]    |
+|     - Measures intrinsic randomness/dispersion of future discrete draws     |
+|     - Non-zero even with infinite historical data                           |
+|     - Evaluated only under explicitly specified predictive distributions    |
 +-----------------------------------------------------------------------------+
 ```
 
 ### 9.1 Baseline B0 Uncertainty
 Model B0 is a fixed theoretical structural null ($\mu_n \equiv 0.27$).
 - **Mean Estimation SE**: $\text{SE}(\hat{\mu}_{\text{B0}}[n]) = 0.0$ (exact).
-- **Prohibition**: $\sqrt{0.27} \approx 0.5196$ is the Poisson standard deviation of a single draw observation, **NOT** the standard error of the estimated mean parameter.
+- **Prohibition**: $\sqrt{0.27}$ is the Poisson standard deviation of a single draw observation, **NOT** the standard error of the estimated mean parameter.
 
 ### 9.2 Baseline B1 Uncertainty
 For a rolling window of $W$ observations:
@@ -373,21 +375,23 @@ For a rolling window of $W$ observations:
 
 $$\text{SE}(\hat{\mu}_{\text{B1}}[n]) = \frac{s_n(W)}{\sqrt{W}}$$
 
-where $s_n(W)$ is the sample standard deviation of $C[\tau, n]$ across the window $\tau \in [t - W, t - 1]$. The exact variance estimation method (e.g., standard sample variance vs. Newey-West HAC) must be selected during development and frozen before confirmatory execution.
+where $s_n(W)$ is the sample standard deviation of $C[\tau, n]$ across the window $\tau \in [t - W, t - 1]$. The exact variance estimation method (e.g., sample variance vs. HAC estimator) is selected during development and frozen before confirmatory execution.
 
 ### 9.3 Model M1 Uncertainty
-For EWMA with weights $w_k = (1 - \alpha)^k$, the effective sample size is:
+For finite normalized EWMA weights $\tilde{w}_k = \frac{w_k}{\sum_{j=0}^{K-1} w_j}$, the effective sample size is:
 
-$$n_{\text{eff}} = \frac{1}{\sum_{k=0}^{K-1} \tilde{w}_k^2} = \frac{1 + (1 - \alpha)}{1 - (1 - \alpha)} = \frac{2 - \alpha}{\alpha} \approx \frac{2}{\alpha}$$
+$$n_{\text{eff}} = \frac{1}{\sum_{k=0}^{K-1} \tilde{w}_k^2}$$
+
+*(Note: As $K \to \infty$ under infinite geometric weighting, $n_{\text{eff}} \to \frac{2 - \alpha}{\alpha}$ as a limiting closed form).*
 
 The exploratory variance approximation:
 
 $$\text{SE}(\hat{\mu}_{\text{M1}}[n]) \approx \sqrt{\frac{\hat{\mu}_{\text{M1}}[n]}{n_{\text{eff}}}}$$
 
-is classified as **Development Evidence Only**. If empirical diagnostics indicate residual autocorrelation or overdispersion, the uncertainty estimator must be updated during development and frozen in the preregistration manifest prior to confirmatory evaluation.
+is classified as **Development Evidence Only**. If empirical diagnostics indicate residual autocorrelation or overdispersion, the uncertainty estimator must be updated during development and frozen in `preregistration.json` prior to confirmatory evaluation.
 
 ### 9.4 Model M2 Uncertainty
-For the Dirichlet-Multinomial model, the posterior covariance over simplex probabilities $\mathbf{p}$ is:
+For the Dirichlet-shrinkage Multinomial model, the posterior covariance over simplex probabilities $\mathbf{p}$ is:
 
 $$\text{Var}(p_n \mid \text{data}) = \frac{\tilde{\alpha}_n (\tilde{\alpha}_0 - \tilde{\alpha}_n)}{\tilde{\alpha}_0^2 (\tilde{\alpha}_0 + 1)}$$
 
@@ -406,8 +410,8 @@ $$\text{EVIDENCE\_CLASS} = \text{DEVELOPMENT / EXPLORATORY}$$
 
 This classification includes, but is not limited to:
 - Historical 3-year count distribution studies.
-- Rolling-window parameter sweep experiments ($W \in [30, 365]$).
-- EWMA half-life sweeps ($H \in [10, 180]$) and historical `hl90` findings.
+- Rolling-window parameter sweep experiments.
+- EWMA half-life sweeps and historical parameter findings.
 - Pre-existing Lower Confidence Bound (LCB) ranking experiments.
 - Previous permutation test runs and bootstrap estimations.
 - Retrospective prospective logs from XPIS v1.2.
@@ -427,7 +431,7 @@ This classification includes, but is not limited to:
 |  - Hyperparameter tuning (Window W, Half-life H, Prior strength \beta)      |
 |  - Uncertainty estimator calibration & diagnostic residual checks           |
 |  - Candidate selection rule design & threshold exploration                  |
-|  - Resampling methodology selection (IID vs Block bootstrap)                |
+|  - Resampling methodology selection                                         |
 |                                                                             |
 |  OUTPUT: Preregistration Manifest & Freeze Manifest                         |
 +-------------------------------------+---------------------------------------+
@@ -553,7 +557,7 @@ Numbers are ranked descending by $\text{LCB}_t[n]$. A portfolio of top-$K$ numbe
 
 $$\mathcal{S}_t = \{ n \in \text{argsort}(\text{LCB}_t)[-K:] \mid \text{LCB}_t[n] \ge \theta_{\text{qual}} \}$$
 
-All policy parameters $(K, z_{\text{crit}}, \theta_{\text{qual}}, \text{SE method})$ must be frozen in `preregistration.json` prior to confirmatory execution.
+All policy parameters $(K, z_{\text{crit}}, \theta_{\text{qual}}, \text{SE method})$ must be evaluated on development data and frozen in `preregistration.json` prior to confirmatory execution.
 
 ---
 
@@ -608,12 +612,12 @@ If the challenger model selects $k_t \in \{0, 1, \dots, K\}$ numbers on date $t$
 
 ### 16.2 Primary Matched B1 Comparator
 The primary comparator is Model B1 (Rolling Count Mean) with matching exposure $k_t$:
-- Compute $\text{LCB}_{\text{B1}, t}[n]$ or rank directly by $\hat{\mu}_{\text{B1}, t}[n]$.
+- Rank numbers under B1 ranking (or $\text{LCB}_{\text{B1}, t}[n]$).
 - Select the top $k_t$ numbers under B1 ranking.
 - Compute paired daily difference: $\Delta_t = \sum_{n \in \mathcal{S}_{\text{chal}, t}} \text{PnL}[t, n] - \sum_{m \in \mathcal{S}_{\text{B1}, t}} \text{PnL}[t, m]$.
 
 ### 16.3 Random Matched Exposure Comparator
-A secondary benchmark selecting $k_t$ numbers uniformly at random without replacement from $\{00, \dots, 99\}$ using a pre-committed, reproducible pseudorandom seed.
+A secondary benchmark selecting a subset of $k_t$ unique numbers uniformly at random from $\{00, \dots, 99\}$ using a pre-committed, reproducible pseudorandom seed.
 
 ### 16.4 Uniform B0 Randomization Protocol
 Because B0 assigns identical point forecasts ($0.27$) to all 100 numbers, ranked selection is degenerate. Any matched comparison against B0 must employ a preregistered deterministic tie-breaking or random sampling protocol.
@@ -652,31 +656,39 @@ To maintain maximal statistical power and prevent family-wise error rate inflati
 
 $$\text{EXACTLY ONE PRIMARY CONFIRMATORY HYPOTHESIS } (H_1^{\text{primary}})$$
 
-### 18.2 Family-Wise Error Rate (FWER) Control
+### 18.2 Family-Wise Error Rate (FWER) Control & Claim Enumeration
 If secondary confirmatory claims are preregistered, multiple-testing correction is mandatory across the complete confirmatory family $\mathcal{F}$:
 
 $$\mathcal{F} = \{ \text{Challengers} \} \times \{ \text{Comparators} \} \times \{ \text{Endpoints} \}$$
 
 - **Nominal Significance Level**: $\alpha = 0.05$.
 - **Default Multiplicity Adjustment**: Holm-Bonferroni step-down procedure.
-- **Family Definition**: The membership of $\mathcal{F}$ must be fully enumerated in `preregistration.json`. No endpoint or comparator may be added to or removed from $\mathcal{F}$ after the freeze.
+- **Claim-Level Preregistration**: The preregistration manifest must explicitly enumerate all individual inferential claims comprising $\mathcal{F}$, recording:
+  - `claim_id`
+  - `family_id`
+  - `hypothesis_id`
+  - `challenger_id`
+  - `endpoint_id`
+  - `comparator_id_or_absolute_null`
+  - `primary_or_secondary`
+- **Family Definition**: The membership of $\mathcal{F}$ must be fully frozen in `preregistration.json`. No endpoint or comparator may be added to or removed from $\mathcal{F}$ after the freeze.
 
 ---
 
 ## 19. Temporal Dependence & Resampling Methodology
 
-### 19.1 Empirical Autocorrelation Diagnostics
-During development, the time series of paired daily differences $\Delta_t$ must be evaluated for temporal dependence using:
-- Autocorrelation Function (ACF) up to lag 30.
-- Ljung-Box test for serial correlation.
-- ARCH-LM test for conditional heteroskedasticity.
+### 19.1 Empirical Dependence Diagnostics
+During development, the time series of paired daily differences $\Delta_t$ must be evaluated for temporal dependence using documented statistical diagnostic methods appropriate to the paired economic estimand (e.g., sample autocorrelation analysis, serial correlation tests).
 
-### 19.2 Resampling Selection Protocol
-1. **Negligible Dependence**: If sample autocorrelations $\rho_k$ are statistically indistinguishable from zero across all lags $k \ge 1$, **Paired IID Bootstrap** (minimum $B = 10,000$ resamples) is the primary inferential tool, with Block Bootstrap reporting sensitivity checks.
-2. **Meaningful Dependence**: If serial correlation is detected, **Moving Block Bootstrap (MBB)** or **Stationary Bootstrap (Politis & Romano)** must be employed.
+### 19.2 Resampling Method Selection Protocol
+Based on development diagnostic findings, development selects the inferential and resampling methodology:
+1. If serial dependence is negligible, **Paired IID Bootstrap** may serve as the primary inferential tool, with Block Bootstrap reporting sensitivity checks.
+2. If meaningful temporal dependence is present, **Moving Block Bootstrap (MBB)** or **Stationary Bootstrap** must be employed.
+
+Development also selects the precision/power target, block selection rule (if applicable), and resample simulation count.
 
 ### 19.3 Pre-Freezing Resampling Strategy
-The resampling procedure, block length selection algorithm (e.g., Patton, Politis, & White optimal block length), and seed generation protocol must be selected exclusively on development data and frozen in `preregistration.json`. Confirmatory results must not influence resampling selection.
+The chosen resampling method, block length rule, simulation count, and pseudorandom seed protocol must be selected exclusively on development data and frozen in `preregistration.json`. Confirmatory results must never influence resampling selection.
 
 ---
 
@@ -688,7 +700,7 @@ For point-mean models, calibration is evaluated by partitioning predicted expect
 $$\text{ECE}_{\text{count}} = \sum_{m=1}^{M} \frac{|B_m|}{100 \cdot T} \left| \bar{\hat{\mu}}_{B_m} - \bar{C}_{B_m} \right|$$
 
 ### 20.2 Discrete Distributional Diagnostics
-For models that output a full predictive distribution $\mathcal{P}_{t, n}(c)$:
+For models that output an explicit full predictive distribution $\mathcal{P}_{t, n}(c)$:
 - **Randomized Probability Integral Transform (Randomized PIT)**: To handle discrete integer counts, uniform jitter is applied within the probability mass interval:
 
 $$U_t[n] = F_{t, n}(C[t, n] - 1) + V \times P_{t, n}(C[t, n]), \quad V \sim \text{Uniform}(0, 1)$$
@@ -706,9 +718,7 @@ $$\text{MINIMUM\_DAY\_FLOOR} = 180 \text{ prospective draw days}$$
 The 180-day threshold is an operational floor, **NOT** an automatic trigger for statistical success.
 
 ### 21.2 Power and Precision Sizing
-Prior to confirmatory launch, development simulations must establish:
-1. The minimum statistical sample size required to achieve $1 - \beta = 0.80$ power at $\alpha = 0.05$ under the development effect size estimate.
-2. The minimum cumulative bet exposure $\sum_{t=1}^T k_t$ required to bound the confidence interval width within target precision.
+Prior to confirmatory launch, development simulations establish the statistical sample size and exposure required to bound the confidence interval width within target precision ($T_{\text{power\_target}}$).
 
 ### 21.3 Preregistered Stopping Rule
 The confirmatory experiment terminates when:
@@ -754,9 +764,8 @@ To reconcile immutable code execution with continuous daily data arrival and led
 +-----------------------------------------------------------------------------+
 |                          TRIPARTITE AUTHORITY MODEL                         |
 +-----------------------------------------------------------------------------+
-|  1. IMPLEMENTATION CODE AUTHORITY (FROZEN)                                  |
-|     - Exact Git Commit SHA: e.g., 067296fb...                               |
-|     - Exact Tree Hash:       e.g., 57a1771d...                               |
+|  1. IMPLEMENTATION CODE AUTHORITY (FROZEN BEFORE CONFIRMATORY LAUNCH)       |
+|     - Recorded upon completion and verification of implementation           |
 |     - Immutable across entire confirmatory trial duration                   |
 +-----------------------------------------------------------------------------+
 |  2. DATA FEED AUTHORITY (EXPLICIT VERSIONED SNAPSHOTS)                      |
@@ -783,7 +792,7 @@ Confirmatory runs must not read untracked or dirty local CSV files. Each data in
   "history_start": "2005-10-01",
   "history_end": "YYYY-MM-DD",
   "history_data_hash": "<sha256_of_canonical_history_bytes>",
-  "ingested_at": "2026-08-30T10:00:00Z"
+  "ingested_at": "YYYY-MM-DDTHH:MM:SSZ"
 }
 ```
 
@@ -833,7 +842,7 @@ Before prospective confirmatory data collection begins, remote branch protection
 
 ---
 
-## 25. Cryptographic Hashing & Envelope Serialization
+## 25. Cryptographic Hashing & Canonical Envelope Serialization
 
 ### 25.1 Envelope Pattern
 To prevent self-referential hashing paradoxes, all persistent JSON records use an envelope structure where the hash covers only the inner `payload`:
@@ -842,25 +851,34 @@ To prevent self-referential hashing paradoxes, all persistent JSON records use a
 {
   "envelope_version": "2.0",
   "payload": {
-    "target_date": "2026-08-31",
-    "hypothesis_id": "H1_EWMA_HL90_LCB",
-    "expected_count": [0.281, 0.254],
+    "target_date": "YYYY-MM-DD",
+    "hypothesis_id": "<hypothesis_id>",
+    "expected_count": [0.27, 0.27],
     "selected_numbers": [12, 85],
     "matched_b1_numbers": [12, 44],
     "matched_random_numbers": [3, 91],
-    "created_at_utc": "2026-08-31T09:00:00Z"
+    "created_at_utc": "YYYY-MM-DDTHH:MM:SSZ"
   },
-  "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  "payload_sha256": "<sha256_hex_digest>"
 }
 ```
 
-### 25.2 Deterministic Canonical Serialization Standard
-The SHA256 digest is computed over the UTF-8 bytes of `payload` serialized under frozen canonical rules:
-1. **Key Ordering**: Lexicographically sorted keys (`sort_keys=True`).
-2. **Whitespace**: Compact separators with no extraneous spacing (`separators=(',', ':')`).
-3. **Floating Point Representation**: 8-decimal place formatted floats (`{:.8f}`) or IEEE-754 canonical shortest round-trip.
-4. **Encoding & Normalization**: UTF-8 character encoding with Unicode Normalization Form C (NFC).
-5. **Newline Policy**: Trailing newline removed before hashing.
+### 25.2 Single Deterministic Canonical Serialization Standard
+Every `serialization_version` must define **EXACTLY ONE** deterministic canonical serialization algorithm. Before confirmatory launch, this algorithm must be fully specified, versioned, tested, and frozen in `freeze_manifest.json`.
+
+The canonical serialization specification must unambiguously define:
+1. **Character Encoding**: UTF-8 without byte order mark.
+2. **Key Ordering**: Strictly lexicographical sort (`sort_keys=True`).
+3. **Number Representation**: Exact, unambiguous numeric formatting without alternative representations. Non-finite values (`NaN`, `Infinity`, `-Infinity`) are strictly prohibited in payloads.
+4. **Unicode Normalization**: Unicode Normalization Form C (NFC).
+5. **Whitespace & Delimiters**: Compact JSON formatting (`separators=(',', ':')`) with no extraneous whitespace.
+6. **Newline Handling**: Deterministic newline policy (trailing newline stripped before hashing).
+
+**Prerequisite Gate**: The exact formal canonical serialization specification is:
+
+$$\text{DEFERRED TO A LATER CONFIRMATORY-INTEGRITY DESIGN GATE}$$
+
+Confirmatory data collection is strictly **BLOCKED** until this exact algorithm is specified and verified.
 
 ---
 
@@ -871,12 +889,12 @@ Local filesystem modification times and local Git commit timestamps are client-c
 
 $$\text{accepted\_forecast} \iff \text{Remote Timestamp} < \text{forecast\_cutoff\_utc}$$
 
-A forecast is admissible as confirmatory evidence **only if** a trusted, immutable remote receipt verifies that the forecast payload was received before the daily draw cutoff time.
+A forecast is admissible as confirmatory evidence **only if** a trusted, immutable remote receipt verifies that the forecast payload was received before the preregistered daily draw cutoff time.
 
 ### 26.2 Forecast Cutoff Rule
 XSMB lottery draws commence daily at 18:15:00 UTC+7 (11:15:00 UTC).
-- **Preregistered Cutoff Time**: `10:30:00 UTC` (45 minutes prior to draw commencement).
-- **Enforcement**: Any forecast record lacking a verified remote receipt timestamped prior to `10:30:00 UTC` on target date $t$ is strictly rejected from confirmatory evaluation.
+- **Preregistered Cutoff Rule**: An explicit `forecast_cutoff_utc` timestamp rule is selected during development and frozen in `freeze_manifest.json` prior to confirmatory launch (strictly preceding draw commencement).
+- **Enforcement**: Any forecast record lacking a verified remote receipt timestamped prior to `forecast_cutoff_utc` on target date $t$ is strictly rejected from confirmatory evaluation.
 
 ### 26.3 Prerequisite Gate
 The concrete remote timestamping infrastructure (e.g., GitHub Actions runner log with cryptographic attestation, commit timestamp verified by GitHub API, or RFC 3161 Time-Stamp Protocol) is:
@@ -895,24 +913,27 @@ Forecast persistence must enforce create-once write semantics:
 - No forecast file may be overwritten, amended, or re-committed.
 
 ### 27.2 Immutable Outcome Ledger
-Daily draw outcome records are written to `outcomes/<target_date>/<outcome_record_id>.json` and include:
+Daily draw outcome records are written to `outcomes/<target_date>/<outcome_record_id>.json` and include full source provenance:
 - `target_date`: 'YYYY-MM-DD'
 - `observed_counts`: Array of shape (100,)
+- `source_repository`: Canonical data repository identifier
 - `source_data_commit`: Git commit SHA of raw data
+- `source_data_path`: Path of raw data file
 - `source_blob_hash`: SHA1 blob hash of data source
 - `retrieved_at`: ISO 8601 UTC timestamp
 - `payload_sha256`: Cryptographic hash of payload
+- `outcome_record_id`: Unique identifier for outcome record
 
 ### 27.3 Explicit Superseding Outcome Correction Protocol
 If an upstream data provider publishes an erroneous draw result and later corrects it:
 1. The original outcome file is **NEVER** overwritten, modified, or deleted.
 2. A new correction record `outcomes/<target_date>/<new_record_id>.json` is created.
-3. The correction record must include:
+3. The correction record must include full provenance metadata:
    - `supersedes_outcome_record_id`: ID of the superseded record.
-   - `correction_reason`: Explanation of upstream correction.
-   - `new_source_commit` & `new_blob_hash`.
-   - `new_payload_sha256`.
-4. Downstream evaluation engines resolve outcomes using the latest valid correction record while preserving the complete audit trail.
+   - `correction_reason`: Detailed explanation of upstream correction.
+   - `source_repository`, `source_data_commit`, `source_data_path`, `source_blob_hash`.
+   - `retrieved_at`, `payload_sha256`, `outcome_record_id`.
+4. Downstream evaluation engines resolve outcomes using the latest valid correction record according to a frozen resolution rule while preserving the complete audit trail.
 
 ---
 
@@ -983,78 +1004,97 @@ A clear boundary separates statistical performance outcomes from integrity viola
 ## 29. Freeze Manifest & Preregistration Specifications
 
 ### 29.1 Freeze Manifest Structure (`freeze_manifest.json`)
+*(Non-normative schema illustration; concrete parameter values must be calibrated on development data and frozen in preregistration)*
+
 ```json
 {
-  "experiment_id": "EXP-2026-COUNT-01",
-  "family_id": "FAM-2026-COUNT-V2",
-  "primary_hypothesis_id": "H1_EWMA_HL90_LCB",
-  "frozen_at_utc": "2026-08-30T12:00:00Z",
+  "experiment_id": "<experiment_id>",
+  "family_id": "<family_id>",
+  "primary_hypothesis_id": "<primary_hypothesis_id>",
+  "frozen_at_utc": "YYYY-MM-DDTHH:MM:SSZ",
   "implementation": {
-    "commit": "067296fbe4d38edbe60fee9a062434c6e06396c4",
-    "tree_hash": "57a1771d2f36a8653c4fd19958f7079707e9b51f",
+    "commit": "<accepted_implementation_commit_sha>",
+    "tree_hash": "<accepted_implementation_tree_sha>",
     "code_repository": "Quan-Nguyen-hp/vietnam-lottery-xsmb-analysis"
   },
   "models": {
     "challenger": {
-      "id": "M1_EWMA_HL90",
+      "id": "<challenger_model_id>",
       "version": "1.0.0",
-      "half_life": 90,
+      "parameters": {},
       "spec_hash": "<sha256>"
     },
     "primary_comparator": {
-      "id": "B1_ROLLING_W90",
+      "id": "<comparator_model_id>",
       "version": "1.0.0",
-      "window": 90,
+      "parameters": {},
       "spec_hash": "<sha256>"
     }
   },
   "selection_rule": {
     "method": "LCB_RANKING",
-    "z_crit": 1.645,
-    "top_k": 2,
-    "min_lcb_threshold": 0.27,
+    "parameters": {},
     "spec_hash": "<sha256>"
   },
   "serialization": {
-    "canonical_version": "v2_utf8_compact",
+    "canonical_version": "v2_canonical_standard",
     "hash_algorithm": "SHA256"
   },
   "protocol": {
-    "forecast_cutoff_utc": "10:30:00",
+    "forecast_cutoff_utc": "<preregistered_cutoff_time_rule>",
     "minimum_day_floor": 180,
-    "power_target_n": 220,
+    "power_target_n": "<preregistered_sample_size>",
     "correction_resolution_rule": "USE_LATEST_SUPERSEDING"
   }
 }
 ```
 
 ### 29.2 Preregistration Structure (`preregistration.json`)
+*(Non-normative schema illustration; concrete parameter values must be calibrated on development data and frozen in preregistration)*
+
 ```json
 {
   "preregistration_version": "1.0.0",
-  "experiment_id": "EXP-2026-COUNT-01",
+  "experiment_id": "<experiment_id>",
   "primary_hypothesis": {
-    "id": "H1_EWMA_HL90_LCB",
-    "statement": "M1 (EWMA HL90) with LCB ranking produces positive economic ROI and outperforms matched B1 over prospective holdout.",
-    "challenger_model": "M1_EWMA_HL90",
-    "primary_matched_comparator": "B1_ROLLING_W90",
+    "id": "<primary_hypothesis_id>",
+    "statement": "<formal_scientific_hypothesis_statement>",
+    "challenger_model": "<challenger_model_id>",
+    "primary_matched_comparator": "<primary_matched_comparator_id>",
     "absolute_edge_estimand": "MEAN_PORTFOLIO_ROI",
     "incremental_edge_estimand": "MEAN_PAIRED_DAILY_PNL_DIFF",
     "nominal_alpha": 0.05
   },
   "confirmatory_family": [
-    "H1_EWMA_HL90_LCB"
+    {
+      "claim_id": "CLAIM-01-ABSOLUTE",
+      "family_id": "<family_id>",
+      "hypothesis_id": "<primary_hypothesis_id>",
+      "challenger_id": "<challenger_model_id>",
+      "endpoint_id": "MEAN_PORTFOLIO_ROI",
+      "comparator_id_or_absolute_null": "ABSOLUTE_NULL_ZERO",
+      "primary_or_secondary": "PRIMARY"
+    },
+    {
+      "claim_id": "CLAIM-02-INCREMENTAL",
+      "family_id": "<family_id>",
+      "hypothesis_id": "<primary_hypothesis_id>",
+      "challenger_id": "<challenger_model_id>",
+      "endpoint_id": "MEAN_PAIRED_DAILY_PNL_DIFF",
+      "comparator_id_or_absolute_null": "<primary_matched_comparator_id>",
+      "primary_or_secondary": "PRIMARY"
+    }
   ],
   "multiplicity_correction": "HOLM_BONFERRONI",
   "statistical_inference": {
-    "resampling_method": "PAIRED_IID_BOOTSTRAP",
-    "resample_count": 10000,
-    "block_size": 1,
-    "random_seed": 20260830
+    "resampling_method": "<preregistered_resampling_method>",
+    "resample_count": "<preregistered_resample_count>",
+    "block_size_rule": "<preregistered_block_rule>",
+    "random_seed": "<preregistered_seed>"
   },
   "blocking_thresholds": {
-    "max_acceptable_mean_ece": 0.15,
-    "max_acceptable_mae": 0.85
+    "max_acceptable_mean_ece": "<preregistered_threshold>",
+    "max_acceptable_mae": "<preregistered_threshold>"
   },
   "invalidation_criteria": [
     "LEAKAGE_TARGET_DATE_IN_HISTORY",
@@ -1083,27 +1123,46 @@ Required test areas:
 
 ### 30.2 Prohibition of Edge Assertions in Unit Tests
 Unit and integration test suites must **NEVER** contain assertions asserting profitability or empirical dominance, such as:
-- `assert ewma_roi > 0`
-- `assert ewma_pnl > b1_pnl`
-- `assert top_lcb_picks == historical_picks`
+- Asserting model ROI exceeds zero.
+- Asserting model PnL exceeds comparator PnL.
+- Asserting specific historical picks recur.
 
 All correctness tests must assert only mathematical invariants, numerical tolerances, determinism, and contract schema validity.
 
 ### 30.3 Confirmatory Integrity Test Suite
-Prior to transitioning any confirmatory experiment to `RUNNING`, the follow-on confirmatory test harness must verify:
-- Inability to overwrite existing forecast records.
-- Rejection of duplicate forecast submissions for the same target date.
-- Rejection of forecasts timestamped after the daily cutoff.
-- Rejection of records with mismatched payload SHA256 digests.
-- Rejection of mutable changes to `freeze_manifest.json` or `preregistration.json`.
-- Enforcement of immutable superseding outcome correction logic.
+Prior to transitioning any confirmatory experiment to `CONFIRMATORY_RUNNING`, the follow-on confirmatory test harness must verify the full integrity test suite:
+1. **Forecast Overwrite Prevention**: Attempting to overwrite an existing forecast record is rejected.
+2. **Duplicate Forecast Identity**: Attempting to submit duplicate forecasts for `(experiment_id, target_date, hypothesis_id)` is rejected.
+3. **Strict Chronological Leakage**: Slices containing `history_date >= target_date` are rejected.
+4. **Date Consistency**: Forecast target date mismatch against outcome target date is rejected.
+5. **Cutoff Compliance**: Forecasts lacking trusted remote receipts prior to `forecast_cutoff_utc` are rejected.
+6. **Late Forecast Rejection**: Any late submission is rejected.
+7. **Preregistration Immutability**: Any mutation of `preregistration.json` after freeze is rejected.
+8. **Manifest Immutability**: Any mutation of `freeze_manifest.json` after freeze is rejected.
+9. **Payload Hash Integrity**: Any payload SHA256 digest mismatch is rejected.
+10. **Canonical Serialization Version**: Any mismatched serialization version is rejected.
+11. **Code & Rule Hash Consistency**: Unknown implementation, model, or rule hashes are rejected.
+12. **Confirmatory Family Consistency**: Mismatches between submitted claims and preregistered family $\mathcal{F}$ are rejected.
+13. **Comparator Bundle Completeness**: Incomplete comparator submissions for target date $t$ are rejected.
+14. **Unversioned Snapshot Rejection**: Data snapshots lacking full provenance commits are rejected.
+15. **Blob Hash Verification**: Data commits with mismatched blob hashes are rejected.
+16. **History Hash Verification**: Data snapshots with mismatched `history_data_hash` digests are rejected.
+17. **Outcome Overwrite Prevention**: Attempting to overwrite existing outcome records is rejected.
+18. **Superseding Correction Integrity**: Outcome corrections lacking explicit `supersedes_outcome_record_id` links and full provenance are rejected.
+
+**Failure Semantics**: Any violation of these integrity rules produces:
+
+$$\text{primary\_hypothesis\_status} = \text{INVALIDATED}, \quad \text{axis\_status} = \text{NOT\_EVALUABLE}$$
+
+Integrity violations must **NEVER** be reported as ordinary statistical `FAIL`.
 
 ---
 
 ## 31. Operational Lifecycles & Production Lock
 
 ### 31.1 Git & Worktree Lifecycle
-- **Implementation Code**: Pinned strictly to `067296fbe4d38edbe60fee9a062434c6e06396c4` (Tree: `57a1771d2f36a8653c4fd19958f7079707e9b51f`).
+- **Design Base**: Anchored strictly to `067296fbe4d38edbe60fee9a062434c6e06396c4` (Tree: `57a1771d2f36a8653c4fd19958f7079707e9b51f`).
+- **Implementation Code**: The future accepted implementation commit and tree hash will be recorded and frozen in `freeze_manifest.json` before confirmatory launch, remaining immutable across the holdout.
 - **Data Ingestion**: Pinned via explicit snapshot metadata referencing upstream canonical commits.
 - **Ledger Storage**: Append-only updates on dedicated research branch `codex/research/xpis-v2-count-first-<experiment_id>`.
 - **Branch Synchronization**: No `git pull`, silent rebase, or merge from `main` into the implementation worktree is permitted during an active slice. Any code synchronization requires an explicit reconciliation gate adjudicated by the ChatGPT Control Plane.
@@ -1141,13 +1200,13 @@ To maintain a focused and achievable Slice 1 scope, the following mechanisms are
    - **Status**: DEFERRED TO A LATER CONFIRMATORY-INTEGRITY DESIGN GATE.
    - **Prerequisite**: Must be designed, verified, and demonstrated before any prospective confirmatory experiment enters `CONFIRMATORY_RUNNING`.
 
-2. **Multivariate Count Calibration & Copula Formulations**:
-   - **Status**: DEFERRED TO A LATER STATISTICAL REFINEMENT GATE.
-   - **Prerequisite**: Requires completion and evaluation of Slice 1 univariate point count baselines.
+2. **Single Deterministic Canonical Serialization Specification**:
+   - **Status**: DEFERRED TO A LATER CONFIRMATORY-INTEGRITY DESIGN GATE.
+   - **Prerequisite**: Must be fully specified and tested before confirmatory data collection is unblocked.
 
-3. **Machine-Learned Count Estimators (e.g., LightGBM Poisson / Negative Binomial)**:
-   - **Status**: DEFERRED TO XPIS v2 SLICE 2.
-   - **Prerequisite**: Requires confirmatory validation of whether linear and shrinkage baselines (M1/M2) establish non-zero empirical edge.
+3. **Machine-Learned Count Models**:
+   - **Status**: DEFERRED.
+   - **Prerequisite**: Machine-learned count models are deferred. Any later ML slice requires a separate ChatGPT Control Plane design / authorization gate. It is NOT part of Slice 1.
 
 ---
 
@@ -1155,5 +1214,5 @@ To maintain a focused and achievable Slice 1 scope, the following mechanisms are
 
 - **Placeholders**: Verified zero unresolved placeholders or stub tags across all sections. All deferred components are explicitly assigned to follow-on design gates with specified prerequisites.
 - **Internal Consistency**: Verified full alignment across count target invariants ($\sum C = 27$), dual-axis independence, dual selective edge criteria ($\text{Absolute} \land \text{Incremental}$), failure vs. invalidation taxonomy, payload hashing envelopes, and tripartite authority separation.
-- **Scope Integrity**: Strictly constrained to minimal research infrastructure (B0, B1, M1, M2). Complex ML, ensembling, and production features are quarantined.
+- **Scope Integrity**: Strictly constrained to minimal development research infrastructure (B0, B1, M1, M2). Complex ML, ensembling, and production features are quarantined.
 - **Ambiguity Elimination**: All statistical choices affecting confirmatory inference are either fixed by this specification or mandated to be frozen in preregistration manifests prior to holdout launch.
