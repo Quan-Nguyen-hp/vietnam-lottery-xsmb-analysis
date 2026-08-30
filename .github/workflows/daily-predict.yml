@@ -1,13 +1,52 @@
-name: Daily Predict & Update (DISABLED)
+name: Daily Predict & Update
 
-# Đã vô hiệu hóa theo yêu cầu người dùng
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Chạy thủ công khi cần
+  schedule:
+    # Chạy lúc 08:00 sáng giờ VN (01:00 UTC) — DỰ ĐOÁN HÔM NAY
+    - cron: '0 1 * * *'
+    # Chạy lúc 19:05 tối giờ VN (12:05 UTC) — CẬP NHẬT KẾT QUẢ + DỰ ĐOÁN NGÀY MAI
+    - cron: '5 12 * * *'
 
 jobs:
   predict-and-update:
     runs-on: ubuntu-latest
-    if: false
+
+    permissions:
+      contents: write  # cần để git push
+
     steps:
-      - name: Disabled
-        run: echo "Workflow disabled"
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # lấy toàn bộ history
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev --no-install-project
+
+      - name: Run auto_runner (predict or update based on time)
+        run: uv run auto_runner.py
+
+      - name: Update locked holdout status
+        run: uv run backtests/holdout_status.py
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "Không có thay đổi để commit"
+            exit 0
+          fi
+
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git add predictions/prediction_log.json
+          git add predictions/adaptive_weights.json
+          git add backtests/results/locked_holdout_status.json
+          git add backtests/results/locked_holdout_status.md
+          git commit -m "auto: predict/update $(date +'%Y-%m-%d %H:%M UTC')"
+          git push origin main
