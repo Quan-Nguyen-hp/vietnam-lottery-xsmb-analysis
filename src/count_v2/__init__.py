@@ -18,6 +18,11 @@ from src.count_v2.dataset import (
     count_outcome_for_date,
     raw_draw_batch_from_frame,
 )
+from src.count_v2.models import (
+    CountModel,
+    RollingCountModel,
+    UniformCountModel,
+)
 
 __all__ = [
     "FORECAST_SUM_TOLERANCE",
@@ -36,4 +41,7 @@ __all__ = [
     "count_matrix_from_raw",
     "count_outcome_for_date",
     "raw_draw_batch_from_frame",
+    "CountModel",
+    "RollingCountModel",
+    "UniformCountModel",
 ]
