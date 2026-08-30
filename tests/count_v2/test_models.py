@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from src.count_v2.contracts import (
@@ -9,6 +10,7 @@ from src.count_v2.contracts import (
 )
 from src.count_v2.models import (
     CountModel,
+    DirichletShrinkageMultinomialModel,
     EWMACountModel,
     RollingCountModel,
     UniformCountModel,
@@ -167,3 +169,82 @@ def test_ewma_model_parameter_validation():
         model.normalized_weights(-1)
     with pytest.raises(ValueError, match="history_rows"):
         model.normalized_weights(True)  # type: ignore
+
+
+def test_dirichlet_shrinkage_matches_uniform_prior_posterior_mean():
+    draw_rows = [
+        [(27 * row_index + offset) % 100 for offset in range(27)]
+        for row_index in range(100)
+    ]
+    dates = pd.date_range("2025-01-01", periods=100, freq="D").strftime("%Y-%m-%d").tolist()
+    history = history_from_draw_rows(dates, draw_rows)
+    np.testing.assert_array_equal(
+        history.counts.sum(axis=0),
+        np.full(100, 27, dtype=np.int64),
+    )
+    model = DirichletShrinkageMultinomialModel(window=100, prior_strength=10.0)
+    assert isinstance(model, CountModel)
+    assert model.model_identity == "M2_DIRICHLET_SHRINKAGE_MULTINOMIAL_W100_B10"
+
+    probabilities = model.posterior_probabilities(history)
+    np.testing.assert_allclose(probabilities, np.full(100, 0.01))
+    assert probabilities.shape == (100,)
+    assert np.isclose(probabilities.sum(), 1.0)
+
+    forecast = model.predict_count(history, "2025-04-11")
+    np.testing.assert_allclose(forecast.expected_count, np.full(100, 0.27))
+    assert np.isclose(forecast.expected_count.sum(), 27.0)
+    assert forecast.mean_standard_error is not None
+    assert forecast.predictive_distribution is None
+    assert forecast.prediction_interval is None
+
+
+def test_dirichlet_shrinkage_posterior_mean_and_variance_on_skewed_data():
+    history = history_from_draw_rows(
+        ["2026-01-01", "2026-01-02"],
+        [[7] * 27, [7] * 27],
+    )
+    model = DirichletShrinkageMultinomialModel(window=2, prior_strength=100.0)
+    probs = model.posterior_probabilities(history)
+
+    # beta = 100, W = 2 => alpha_total = 100 + 27*2 = 154
+    # alpha_7 = 100/100 + 54 = 55 => p_7 = 55 / 154 = 0.357142857...
+    # alpha_other = 100/100 + 0 = 1 => p_other = 1 / 154 = 0.0064935...
+    alpha_total = 100.0 + 27.0 * 2.0
+    expected_p7 = (1.0 + 54.0) / alpha_total
+    expected_p_other = 1.0 / alpha_total
+
+    assert np.isclose(probs[7], expected_p7)
+    assert np.isclose(probs[0], expected_p_other)
+    assert np.isclose(probs.sum(), 1.0)
+
+    forecast = model.predict_count(history, "2026-01-03")
+    np.testing.assert_allclose(forecast.expected_count, 27.0 * probs)
+    assert np.isclose(forecast.expected_count.sum(), 27.0)
+
+    # Variance: alpha_n * (alpha_total - alpha_n) / (alpha_total^2 * (alpha_total + 1))
+    # SE = 27 * sqrt(var)
+    alpha = np.full(100, 1.0)
+    alpha[7] = 55.0
+    var_p = (alpha * (alpha_total - alpha)) / (alpha_total**2 * (alpha_total + 1.0))
+    expected_se = 27.0 * np.sqrt(var_p)
+    np.testing.assert_allclose(forecast.mean_standard_error, expected_se)
+
+
+def test_dirichlet_shrinkage_parameter_validation():
+    with pytest.raises(ValueError, match="window"):
+        DirichletShrinkageMultinomialModel(window=0, prior_strength=10.0)
+    with pytest.raises(ValueError, match="window"):
+        DirichletShrinkageMultinomialModel(window=-1, prior_strength=10.0)
+    with pytest.raises(ValueError, match="window"):
+        DirichletShrinkageMultinomialModel(window=True, prior_strength=10.0)  # type: ignore
+    with pytest.raises(ValueError, match="prior_strength"):
+        DirichletShrinkageMultinomialModel(window=10, prior_strength=0.0)
+    with pytest.raises(ValueError, match="prior_strength"):
+        DirichletShrinkageMultinomialModel(window=10, prior_strength=-5.0)
+    with pytest.raises(ValueError, match="prior_strength"):
+        DirichletShrinkageMultinomialModel(window=10, prior_strength=np.nan)
+    with pytest.raises(ValueError, match="prior_strength"):
+        DirichletShrinkageMultinomialModel(window=10, prior_strength=np.inf)
+    with pytest.raises(ValueError, match="prior_strength"):
+        DirichletShrinkageMultinomialModel(window=10, prior_strength=True)  # type: ignore
