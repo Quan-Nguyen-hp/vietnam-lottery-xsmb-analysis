@@ -1,6 +1,6 @@
 # XPIS v2 Count-First Research Subsystem — Architecture & Statistical Design Specification
 
-- **Document Version**: 2.1.0-REVISED
+- **Document Version**: 2.2.0-FINAL
 - **Date**: 2026-08-30
 - **Status**: DESIGN SPECIFICATION (LOCKED FOR CHATGPT CONTROL PLANE REVIEW)
 - **Authoring Agent**: Repositorially Grounded Design Spec Author (Gemini 3.7 Flash, Reasoning: High)
@@ -366,16 +366,17 @@ A single ambiguous standard deviation $\sigma$ must **NEVER** be used.
 
 ### 9.1 Baseline B0 Uncertainty
 Model B0 is a fixed theoretical structural null ($\mu_n \equiv 0.27$).
-- **Mean Estimation SE**: $\text{SE}(\hat{\mu}_{\text{B0}}[n]) = 0.0$ (exact).
-- **Prohibition**: $\sqrt{0.27}$ is the Poisson standard deviation of a single draw observation, **NOT** the standard error of the estimated mean parameter.
+- **Mean Estimation SE**: $\text{SE}(\hat{\mu}_{\text{B0}}[n]) = 0.0$ (exact parameter-free null).
+- **Uncertainty Clarification**: Under a Poisson working model with daily count mean 0.27, $\sqrt{0.27}$ would describe the predictive standard deviation of one future daily count $C[t, n]$, NOT the standard error of the estimated conditional mean. The Poisson working model is not part of the generic base contract.
 
 ### 9.2 Baseline B1 Uncertainty
-For a rolling window of $W$ observations:
-- **Mean Estimation SE**:
-
-$$\text{SE}(\hat{\mu}_{\text{B1}}[n]) = \frac{s_n(W)}{\sqrt{W}}$$
-
-where $s_n(W)$ is the sample standard deviation of $C[\tau, n]$ across the window $\tau \in [t - W, t - 1]$. The exact variance estimation method (e.g., sample variance vs. HAC estimator) is selected during development and frozen before confirmatory execution.
+For Model B1 (Rolling Count Baseline):
+- **Point Estimator**: Trailing sample mean over historical window $W$.
+- **Mean Estimation Uncertainty**: Evaluated using a development-selected estimator appropriate to the empirical dependence structure of the count series.
+- **Candidate Estimators**:
+  - *IID Candidate (Development Example)*: $\text{SE}(\hat{\mu}_{\text{B1}}[n]) \approx \frac{s_n(W)}{\sqrt{W}}$, where $s_n(W)$ is the sample standard deviation over window $W$.
+  - *Dependence-Aware Alternatives*: Autocorrelation- and heteroskedasticity-consistent (HAC) estimators or block-resampling standard errors are permitted if justified by development diagnostics.
+- **Preregistration Freeze**: The authoritative variance and standard error estimation method for Model B1 must be selected exclusively from development data and frozen in `preregistration.json` prior to confirmatory launch.
 
 ### 9.3 Model M1 Uncertainty
 For finite normalized EWMA weights $\tilde{w}_k = \frac{w_k}{\sum_{j=0}^{K-1} w_j}$, the effective sample size is:
@@ -490,14 +491,14 @@ AXIS 2: SELECTIVE EDGE     (Economic Profitability, Matched Superiority)
 |  - Global Root Mean Squared Error   |    LCB(Challenger PnL) > 0            |
 |  - Poisson Deviance / Scoring Rule  |  - Incremental Matched Edge:          |
 |  - Discrete Mean Calibration        |    LCB(PnL_chal - PnL_B1_match) > 0   |
-|  - Evaluates all 100 numbers        |  - Evaluates Top-K Selected Subset    |
+|  - Evaluates all 100 numbers        |  - Evaluates Selected Candidate Subset|
 +-------------------------------------+---------------------------------------+
 |  STATUS: PASS / FAIL / NOT_EVALUABLE|  STATUS: PASS / FAIL / NOT_EVALUABLE  |
 +-------------------------------------+---------------------------------------+
 ```
 
 ### 12.1 Non-Hierarchical Architecture
-The system must **NOT** implement evaluation as a sequential conditional gate (i.e., "Axis 1 must pass before Axis 2 is evaluated"). A model may have slightly higher global deviance across all 100 numbers while isolating sharp, statistically valid signal in the extreme upper tail ($k \le 2$). Both axes must be tracked, computed, and reported independently.
+The system must **NOT** implement evaluation as a sequential conditional gate (i.e., "Axis 1 must pass before Axis 2 is evaluated"). A model may exhibit higher global deviance across all 100 numbers while isolating sharp, statistically valid signal in a selectively ranked upper tail. Both axes must be tracked, computed, and reported independently.
 
 ---
 
@@ -657,12 +658,13 @@ To maintain maximal statistical power and prevent family-wise error rate inflati
 $$\text{EXACTLY ONE PRIMARY CONFIRMATORY HYPOTHESIS } (H_1^{\text{primary}})$$
 
 ### 18.2 Family-Wise Error Rate (FWER) Control & Claim Enumeration
-If secondary confirmatory claims are preregistered, multiple-testing correction is mandatory across the complete confirmatory family $\mathcal{F}$:
+The confirmatory family $\mathcal{F}$ comprises all preregistered confirmatory inferential claims across challengers, endpoints, and comparators (including absolute null claims):
 
-$$\mathcal{F} = \{ \text{Challengers} \} \times \{ \text{Comparators} \} \times \{ \text{Endpoints} \}$$
+$$\mathcal{F} = \{ \text{Confirmatory Inferential Claims} \}$$
 
-- **Nominal Significance Level**: $\alpha = 0.05$.
-- **Default Multiplicity Adjustment**: Holm-Bonferroni step-down procedure.
+- **Multiplicity Mandate**: If the total count of confirmatory claims $|\mathcal{F}| > 1$, preregistered family-wise multiplicity control **MUST** apply. This rule applies universally regardless of whether individual claims are labeled as primary or secondary.
+- **Multiplicity-Aware Selective Edge Decision**: Both `ABSOLUTE_EDGE_PASS` and `INCREMENTAL_EDGE_PASS` must be adjudicated using the inferential thresholds and adjusted confidence bounds resulting from the preregistered multiplicity-aware procedure whenever multiplicity adjustment applies. Evaluating claims using raw unadjusted confidence bounds while declaring FWER control is strictly prohibited.
+- **Alpha Budgeting & Mapping**: The exact formal mapping between nominal claim-level $\alpha$, family-level $\alpha_{\text{family}} = 0.05$, and the multiplicity-adjusted critical values (e.g., Holm-Bonferroni step-down thresholds) must be explicitly formalized and frozen in `preregistration.json` before holdout launch.
 - **Claim-Level Preregistration**: The preregistration manifest must explicitly enumerate all individual inferential claims comprising $\mathcal{F}$, recording:
   - `claim_id`
   - `family_id`
@@ -671,7 +673,7 @@ $$\mathcal{F} = \{ \text{Challengers} \} \times \{ \text{Comparators} \} \times 
   - `endpoint_id`
   - `comparator_id_or_absolute_null`
   - `primary_or_secondary`
-- **Family Definition**: The membership of $\mathcal{F}$ must be fully frozen in `preregistration.json`. No endpoint or comparator may be added to or removed from $\mathcal{F}$ after the freeze.
+- **Family Immutability**: The membership of $\mathcal{F}$ is immutable once frozen. No claim, endpoint, or comparator may be added to or removed from $\mathcal{F}$ during holdout.
 
 ---
 
@@ -694,10 +696,18 @@ The chosen resampling method, block length rule, simulation count, and pseudoran
 
 ## 20. Distributional Calibration Diagnostics
 
-### 20.1 Mean Calibration Diagnostics
+### 20.1 Mean Calibration Diagnostics & Quantified Blocking
 For point-mean models, calibration is evaluated by partitioning predicted expected counts into $M$ sorting bins and comparing bin-average predictions with observed average counts:
 
 $$\text{ECE}_{\text{count}} = \sum_{m=1}^{M} \frac{|B_m|}{100 \cdot T} \left| \bar{\hat{\mu}}_{B_m} - \bar{C}_{B_m} \right|$$
+
+- **Confirmatory Blocking Specification**: If $\text{ECE}_{\text{count}}$ or any binned calibration metric is designated as an evaluative blocking criterion capable of triggering `forecast_validity_status = FAIL`, its complete metric definition must be fully specified and frozen in `preregistration.json` prior to confirmatory launch:
+  1. Exact number of bins ($M$).
+  2. Exact bin partitioning / construction rule (e.g., uniform width vs. quantile equal-frequency).
+  3. Sample weighting rule.
+  4. Aggregation formula.
+  5. Exact numerical blocking threshold.
+  Discretionary or post-hoc alteration of $M$ or bin definitions after observing confirmatory data is strictly prohibited. If calibration diagnostics are employed purely descriptively, they must be explicitly designated as descriptive in `preregistration.json`.
 
 ### 20.2 Discrete Distributional Diagnostics
 For models that output an explicit full predictive distribution $\mathcal{P}_{t, n}(c)$:
@@ -710,21 +720,29 @@ $$U_t[n] = F_{t, n}(C[t, n] - 1) + V \times P_{t, n}(C[t, n]), \quad V \sim \tex
 
 ---
 
-## 21. Experiment Duration, Power, and Stopping Rules
+## 21. Experiment Duration, Power, Exposure, and Stopping Rules
 
 ### 21.1 Minimum Duration Floor
 $$\text{MINIMUM\_DAY\_FLOOR} = 180 \text{ prospective draw days}$$
 
-The 180-day threshold is an operational floor, **NOT** an automatic trigger for statistical success.
+The 180-day threshold is an operational floor, **NOT** an automatic trigger for statistical success or termination.
 
-### 21.2 Power and Precision Sizing
-Prior to confirmatory launch, development simulations establish the statistical sample size and exposure required to bound the confidence interval width within target precision ($T_{\text{power\_target}}$).
+### 21.2 Power, Precision, and Cumulative Exposure Sizing
+Prior to confirmatory launch, development simulations establish the statistical requirements for valid confirmatory inference:
+1. **Minimum Bet Exposure**: The minimum cumulative bet exposure $\sum_{t=1}^T k_t$ required to ensure sufficient sample support.
+2. **Precision / Power Target**: Sizing simulations establishing the duration and exposure required to bound the confidence interval width within target precision.
 
-### 21.3 Preregistered Stopping Rule
-The confirmatory experiment terminates when:
+### 21.3 Preregistered Multi-Condition Stopping Rule
+The confirmatory experiment terminates **ONLY** when all preregistered stopping conditions are simultaneously satisfied:
 
-$$T \ge \max\left(\text{MINIMUM\_DAY\_FLOOR}, T_{\text{power\_target}}\right)$$
+$$\text{STOPPING\_SATISFIED} \iff \begin{cases}
+\text{DAY\_FLOOR\_SATISFIED} & (T \ge \text{MINIMUM\_DAY\_FLOOR}) \\
+\text{MINIMUM\_EXPOSURE\_SATISFIED} & \left(\sum_{t=1}^T k_t \ge \text{MINIMUM\_EXPOSURE}\right) \\
+\text{PRECISION\_OR\_POWER\_SATISFIED} & (\text{Target statistical precision / power met}) \\
+\text{ALL\_OTHER\_PREREGISTERED\_CONDITIONS\_SATISFIED} &
+\end{cases}$$
 
+Termination based solely on elapsed calendar or target days without meeting cumulative exposure and precision requirements is strictly prohibited.
 Interim inspections during the holdout period are strictly observational. Early stopping for perceived efficacy or early failure is strictly forbidden.
 
 ---
@@ -891,9 +909,16 @@ $$\text{accepted\_forecast} \iff \text{Remote Timestamp} < \text{forecast\_cutof
 
 A forecast is admissible as confirmatory evidence **only if** a trusted, immutable remote receipt verifies that the forecast payload was received before the preregistered daily draw cutoff time.
 
-### 26.2 Forecast Cutoff Rule
-XSMB lottery draws commence daily at 18:15:00 UTC+7 (11:15:00 UTC).
-- **Preregistered Cutoff Rule**: An explicit `forecast_cutoff_utc` timestamp rule is selected during development and frozen in `freeze_manifest.json` prior to confirmatory launch (strictly preceding draw commencement).
+### 26.2 Draw Schedule Authority & Forecast Cutoff Protocol
+The lottery draw schedule is an external, versioned input governed by an explicit schedule authority:
+- **Verified Schedule Authority**: Prior to confirmatory launch, the experiment must freeze a verified schedule authority record in `freeze_manifest.json` containing:
+  - `draw_schedule_source`: Official data/draw authority source identifier.
+  - `draw_schedule_version_or_retrieval_provenance`: Timestamped retrieval provenance of verified schedule rules.
+  - `draw_timezone`: Official local timezone (e.g., UTC+07:00).
+  - `draw_commencement_rule`: Formal draw commencement timing rule.
+  - `forecast_cutoff_rule`: Preregistered UTC cutoff timestamp rule (`forecast_cutoff_utc`).
+- **Cutoff Invariant**: The preregistered `forecast_cutoff_utc` must strictly precede verified draw commencement under all circumstances.
+- **Schedule Revalidation**: Schedule authority must be revalidated according to a frozen protocol without using draw outcome information.
 - **Enforcement**: Any forecast record lacking a verified remote receipt timestamped prior to `forecast_cutoff_utc` on target date $t$ is strictly rejected from confirmatory evaluation.
 
 ### 26.3 Prerequisite Gate
@@ -1040,10 +1065,18 @@ A clear boundary separates statistical performance outcomes from integrity viola
     "canonical_version": "v2_canonical_standard",
     "hash_algorithm": "SHA256"
   },
+  "schedule_authority": {
+    "draw_schedule_source": "<verified_schedule_source>",
+    "draw_schedule_provenance": "<schedule_provenance_metadata>",
+    "draw_timezone": "UTC+07:00",
+    "draw_commencement_rule": "<verified_commencement_timing_rule>",
+    "forecast_cutoff_rule": "<preregistered_cutoff_time_rule>"
+  },
   "protocol": {
-    "forecast_cutoff_utc": "<preregistered_cutoff_time_rule>",
     "minimum_day_floor": 180,
-    "power_target_n": "<preregistered_sample_size>",
+    "minimum_exposure": "<preregistered_minimum_bet_count>",
+    "precision_or_power_target": "<preregistered_precision_target>",
+    "stopping_rule": "<preregistered_stopping_condition_rule>",
     "correction_resolution_rule": "USE_LATEST_SUPERSEDING"
   }
 }
@@ -1085,15 +1118,30 @@ A clear boundary separates statistical performance outcomes from integrity viola
       "primary_or_secondary": "PRIMARY"
     }
   ],
-  "multiplicity_correction": "HOLM_BONFERRONI",
+  "multiplicity_control": {
+    "procedure": "HOLM_BONFERRONI",
+    "family_alpha": 0.05,
+    "claim_level_adjustment_rule": "<preregistered_multiplicity_adjustment_rule>"
+  },
   "statistical_inference": {
     "resampling_method": "<preregistered_resampling_method>",
     "resample_count": "<preregistered_resample_count>",
     "block_size_rule": "<preregistered_block_rule>",
     "random_seed": "<preregistered_seed>"
   },
+  "termination_criteria": {
+    "minimum_day_floor": 180,
+    "minimum_exposure": "<preregistered_minimum_bet_count>",
+    "precision_or_power_target": "<preregistered_precision_target>",
+    "stopping_rule": "<preregistered_multi_condition_rule>"
+  },
   "blocking_thresholds": {
-    "max_acceptable_mean_ece": "<preregistered_threshold>",
+    "mean_calibration_metric": {
+      "metric_type": "ECE_COUNT",
+      "number_of_bins": "<preregistered_bin_count>",
+      "bin_construction_rule": "<preregistered_binning_rule>",
+      "max_acceptable_ece": "<preregistered_threshold>"
+    },
     "max_acceptable_mae": "<preregistered_threshold>"
   },
   "invalidation_criteria": [
