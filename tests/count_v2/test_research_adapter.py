@@ -269,7 +269,31 @@ def test_artifacts_are_create_once_and_development_classified(tmp_path):
         write_development_artifacts(result, config, run_id="DEV_TEST_001", artifact_root=tmp_path)
 
 
-def test_main_cli_execution_with_custom_artifact_root(tmp_path, monkeypatch):
+def test_write_development_artifacts_rejects_path_traversal_and_invalid_run_id(tmp_path):
+    config = make_development_config()
+    forecast_set = generate_walk_forward_forecasts(make_adapter_batch(row_count=6), config)
+    result = evaluate_development_run(forecast_set, config)
+
+    for bad_run_id in (
+        "../escape",
+        r"..\escape",
+        ".",
+        "..",
+        "/absolute/escape",
+        r"C:\absolute\escape",
+        "sub/dir",
+        r"sub\dir",
+    ):
+        with pytest.raises((ValueError, EvaluationIntegrityError)):
+            write_development_artifacts(result, config, run_id=bad_run_id, artifact_root=tmp_path)
+
+
+def test_main_cli_fails_when_development_parameters_are_missing():
+    with pytest.raises(SystemExit):
+        main(["--test-rows", "2"])
+
+
+def test_main_cli_execution_uses_approved_development_root(tmp_path, monkeypatch):
     frame = make_legacy_frame([f"2026-01-{i:02d}" for i in range(1, 10)])
 
     class FakeLoader:
@@ -288,6 +312,7 @@ def test_main_cli_execution_with_custom_artifact_root(tmp_path, monkeypatch):
             raise AssertionError("binary S must not be read")
 
     monkeypatch.setattr(count_v2_research, "DataLoader", FakeLoader)
+    monkeypatch.setattr(count_v2_research, "DEVELOPMENT_ARTIFACT_ROOT", tmp_path)
 
     argv = [
         "--test-rows",
@@ -302,8 +327,6 @@ def test_main_cli_execution_with_custom_artifact_root(tmp_path, monkeypatch):
         "10.0",
         "--top-k",
         "2",
-        "--artifact-root",
-        str(tmp_path),
         "--run-id",
         "CLI_RUN_001",
     ]
@@ -311,6 +334,7 @@ def test_main_cli_execution_with_custom_artifact_root(tmp_path, monkeypatch):
     assert exit_code == 0
     assert (tmp_path / "CLI_RUN_001" / "summary.json").exists()
     assert (tmp_path / "CLI_RUN_001" / "forecasts.npz").exists()
+
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent

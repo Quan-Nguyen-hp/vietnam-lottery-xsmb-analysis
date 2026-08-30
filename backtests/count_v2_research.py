@@ -226,10 +226,31 @@ def write_development_artifacts(
     config: DevelopmentRunConfig,
     *,
     run_id: str,
-    artifact_root: Path = DEVELOPMENT_ARTIFACT_ROOT,
+    artifact_root: Path | None = None,
 ) -> Path:
     """Persist exploratory development summary.json and forecasts.npz."""
-    run_dir = Path(artifact_root) / run_id
+    if not isinstance(run_id, str) or not run_id.strip():
+        raise EvaluationIntegrityError("run_id must be a non-empty string")
+
+    if "/" in run_id or "\\" in run_id or run_id in {".", ".."}:
+        raise EvaluationIntegrityError(
+            f"Invalid run_id (path traversal or separator detected): {run_id!r}"
+        )
+
+    run_id_path = Path(run_id)
+    if run_id_path.is_absolute() or run_id_path.name != run_id:
+        raise EvaluationIntegrityError(
+            f"Invalid run_id (not a single path component): {run_id!r}"
+        )
+
+    effective_root = artifact_root if artifact_root is not None else DEVELOPMENT_ARTIFACT_ROOT
+    root_resolved = Path(effective_root).resolve()
+    run_dir = (root_resolved / run_id).resolve()
+    if run_dir.parent != root_resolved:
+        raise EvaluationIntegrityError(
+            f"run_id '{run_id}' escapes artifact_root '{effective_root}'"
+        )
+
     run_dir.mkdir(parents=True, exist_ok=False)
 
     target_dates = result.forecast_set.target_dates
@@ -283,31 +304,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--rolling-window",
         type=int,
-        default=30,
+        required=True,
         help="Window for B1 rolling baseline",
     )
     parser.add_argument(
         "--ewma-half-life",
         type=float,
-        default=14.0,
+        required=True,
         help="Half-life for M1 EWMA model",
     )
     parser.add_argument(
         "--dirichlet-window",
         type=int,
-        default=45,
+        required=True,
         help="Window for M2 Dirichlet model",
     )
     parser.add_argument(
         "--prior-strength",
         type=float,
-        default=20.0,
+        required=True,
         help="Prior strength beta for M2 Dirichlet model",
     )
     parser.add_argument(
         "--top-k",
         type=int,
-        default=5,
+        required=True,
         help="Top-K count candidates for economic summary",
     )
     parser.add_argument(
@@ -315,12 +336,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=str,
         default=None,
         help="Optional path to custom lottery CSV",
-    )
-    parser.add_argument(
-        "--artifact-root",
-        type=str,
-        default=str(DEVELOPMENT_ARTIFACT_ROOT),
-        help="Artifact root directory",
     )
     parser.add_argument(
         "--run-id",
@@ -349,10 +364,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.run_id
         or f"DEV_RUN_{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     )
-    artifact_root = Path(args.artifact_root)
-    run_dir = write_development_artifacts(
-        result, config, run_id=run_id, artifact_root=artifact_root
-    )
+    run_dir = write_development_artifacts(result, config, run_id=run_id)
 
     print(f"Artifacts written to: {run_dir}")
     return 0
