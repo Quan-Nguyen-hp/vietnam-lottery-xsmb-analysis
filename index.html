@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hệ Thống Dự Báo Định Lượng XSMB (XPIS Dashboard)</title>
   <meta name="description" content="Hệ thống dự đoán thích ứng XSMB tự động cập nhật kết quả và tối ưu hóa trọng số.">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -662,7 +665,17 @@
         // Trạng thái dự đoán mới nhất
         const statusEl = document.getElementById('val-pred-status');
         if (!Array.isArray(latest.actual_results)) {
-          statusEl.innerHTML = `<span class="pnl-badge badge-gray">⏳ Đang chờ kết quả mở thưởng (lúc 18:15)</span>`;
+          let recentHighlightHtml = '';
+          if (completed.length > 0) {
+            const lastDone = completed[completed.length - 1];
+            const lastDate = lastDone.pipeline_metadata ? lastDone.pipeline_metadata.date : lastDone.date;
+            const lastHits = lastDone.ensemble_hits || 0;
+            const lastPnl = lastDone.pnl_k || 0;
+            if (lastHits > 0) {
+              recentHighlightHtml = `<div style="margin-top: 0.6rem; font-size: 0.85rem; color: var(--success); font-weight: 600;">✨ Kỳ vừa quay (${lastDate}): Đã trúng ${lastHits} nháy (+${(lastPnl * 1000).toLocaleString('vi-VN')}đ)</div>`;
+            }
+          }
+          statusEl.innerHTML = `<span class="pnl-badge badge-gray">⏳ Đang chờ kết quả mở thưởng (lúc 18:15)</span>` + recentHighlightHtml;
         } else {
           const hits = latest.ensemble_hits || 0;
           const pnl = latest.pnl_k || 0;
@@ -757,7 +770,7 @@
             if (entryV12 && e.bets) {
               realPicks = e.bets.filter(b => b.decision === 'BET').map(b => b.number);
             }
-            const realCost = e.cost_k || (realPicks.length * COST_PER_BET) || 0;
+            const realCost = realPicks.length > 0 ? (e.cost_k || (realPicks.length * COST_PER_BET)) : 0;
             const realHits = realPicks.reduce((acc, num) => acc + (actualCounts[num] || 0), 0);
             const realRev = realPicks.length > 0 ? (realHits * PAYOUT_PER_HIT) : 0;
             realTotalCost += realCost;
