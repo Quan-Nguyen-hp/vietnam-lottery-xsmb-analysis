@@ -52,16 +52,16 @@ NUMERIC_REL_TOLERANCE: float = 1e-12
 
 
 class ArtifactValidationError(ModelValidationError):
-    """Raised when development success artifacts fail validation."""
+    """Base error for all failures during artifact validation."""
 
     stage: FailureStage = FailureStage.ARTIFACT_VALIDATION
-    exit_status: FailureExitStatus = FailureExitStatus.TECHNICAL_FAILURE
+    exit_status: FailureExitStatus = FailureExitStatus.NEEDS_PROTOCOL_REVISION
 
     def __init__(
         self,
         message: str,
         error_type: str = "ArtifactValidationError",
-        exit_status: FailureExitStatus = FailureExitStatus.TECHNICAL_FAILURE,
+        exit_status: FailureExitStatus = FailureExitStatus.NEEDS_PROTOCOL_REVISION,
     ) -> None:
         super().__init__(message)
         self.error_type = error_type
@@ -75,24 +75,72 @@ class ArtifactValidationError(ModelValidationError):
         )
 
 
+class ArtifactProtocolInconsistencyError(ArtifactValidationError):
+    """Raised when an artifact bundle violates protocol or artifact contract requirements."""
+
+    stage: FailureStage = FailureStage.ARTIFACT_VALIDATION
+    exit_status: FailureExitStatus = FailureExitStatus.NEEDS_PROTOCOL_REVISION
+
+    def __init__(
+        self,
+        message: str,
+        error_type: str = "ArtifactProtocolInconsistencyError",
+    ) -> None:
+        super().__init__(
+            message,
+            error_type=error_type,
+            exit_status=FailureExitStatus.NEEDS_PROTOCOL_REVISION,
+        )
+
+
+class ArtifactTechnicalFailureError(ArtifactValidationError):
+    """Raised when an unexpected filesystem, I/O, or library exception occurs during validation."""
+
+    stage: FailureStage = FailureStage.ARTIFACT_VALIDATION
+    exit_status: FailureExitStatus = FailureExitStatus.TECHNICAL_FAILURE
+
+    def __init__(
+        self,
+        message: str,
+        error_type: str = "ArtifactTechnicalFailureError",
+    ) -> None:
+        super().__init__(
+            message,
+            error_type=error_type,
+            exit_status=FailureExitStatus.TECHNICAL_FAILURE,
+        )
+
+
 def _load_raw_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> dict[str, bytes]:
     """Load artifacts into an in-memory dictionary of raw bytes."""
     if isinstance(artifacts, (str, Path)):
         directory = Path(artifacts)
         if not directory.is_dir():
-            raise ArtifactValidationError(
-                f"Artifact path is not a directory: {directory}",
+            raise ArtifactTechnicalFailureError(
+                f"Artifact path is not a directory or does not exist: {directory}",
                 error_type="ARTIFACT_DIRECTORY_NOT_FOUND",
             )
         raw_bundle: dict[str, bytes] = {}
-        for p in directory.iterdir():
-            if p.is_dir():
-                raise ArtifactValidationError(
-                    f"Unexpected directory in artifacts: {p.name}",
-                    error_type="ARTIFACT_UNEXPECTED_DIRECTORY",
-                )
-            if p.is_file():
-                raw_bundle[p.name] = p.read_bytes()
+        try:
+            for p in directory.iterdir():
+                if p.is_dir():
+                    raise ArtifactProtocolInconsistencyError(
+                        f"Unexpected directory in artifacts: {p.name}",
+                        error_type="ARTIFACT_UNEXPECTED_DIRECTORY",
+                    )
+                if p.is_file():
+                    try:
+                        raw_bundle[p.name] = p.read_bytes()
+                    except OSError as err:
+                        raise ArtifactTechnicalFailureError(
+                            f"Unexpected I/O error reading artifact {p.name}: {err}",
+                            error_type="ARTIFACT_FILE_READ_ERROR",
+                        ) from err
+        except OSError as err:
+            raise ArtifactTechnicalFailureError(
+                f"Unexpected I/O error accessing artifact directory {directory}: {err}",
+                error_type="ARTIFACT_DIRECTORY_ACCESS_ERROR",
+            ) from err
         return raw_bundle
     return dict(artifacts)
 
@@ -284,13 +332,13 @@ def _validate_gzip_scores(raw_gz: bytes) -> list[list[str]]:
     try:
         decompressed = d.decompress(raw_gz)
     except Exception as err:
-        raise ArtifactValidationError(
-            f"Gzip decompression error: {err}",
+        raise ArtifactTechnicalFailureError(
+            f"Unexpected compression library failure during gzip decompression: {err}",
             error_type="GZIP_DECOMPRESS_ERROR",
         ) from err
 
     if d.unused_data:
-        raise ArtifactValidationError(
+        raise ArtifactProtocolInconsistencyError(
             "daily_forecast_scores.csv.gz has multiple gzip members or trailing data",
             error_type="GZIP_MULTI_MEMBER",
         )
@@ -299,13 +347,13 @@ def _validate_gzip_scores(raw_gz: bytes) -> list[list[str]]:
     try:
         std_decompressed = gzip.decompress(raw_gz)
     except Exception as err:
-        raise ArtifactValidationError(
+        raise ArtifactTechnicalFailureError(
             f"Gzip trailer or CRC validation failed: {err}",
             error_type="GZIP_CORRUPT_TRAILER",
         ) from err
 
     if std_decompressed != decompressed:
-        raise ArtifactValidationError(
+        raise ArtifactTechnicalFailureError(
             "Gzip decompress mismatch",
             error_type="GZIP_DECOMPRESS_MISMATCH",
         )

@@ -20,7 +20,10 @@ from src.m3_digit_factor.authority import (
 from src.m3_digit_factor.contracts import FailureExitStatus, FailureStage
 from src.m3_digit_factor.economics import PerKEconomicEvaluation
 from src.m3_digit_factor.model import ModelValidationError
+from src.m3_digit_factor.serialization import GZIP_HEADER_BYTES
 from src.m3_digit_factor.validation import (
+    ArtifactProtocolInconsistencyError,
+    ArtifactTechnicalFailureError,
     ArtifactValidationError,
     validate_success_artifacts,
 )
@@ -137,7 +140,7 @@ def _create_economic_signal_bundle() -> dict[str, bytes]:
 
 
 def test_valid_bundles_pass_validation(tmp_path: Path) -> None:
-    """Valid bundles pass validation in-memory and from directory."""
+    """Canonical valid bundles pass validation in-memory and from directory."""
     bundle_failed = _create_forecast_failed_bundle()
     validate_success_artifacts(bundle_failed)
 
@@ -151,133 +154,172 @@ def test_valid_bundles_pass_validation(tmp_path: Path) -> None:
 
 
 def test_error_attributes_and_inheritance() -> None:
-    """ArtifactValidationError conforms to protocol failure taxonomy."""
-    err = ArtifactValidationError("Invalid bundle", error_type="ARTIFACT_COUNT_MISMATCH")
-    assert isinstance(err, ModelValidationError)
-    assert err.stage == FailureStage.ARTIFACT_VALIDATION
-    assert err.exit_status == FailureExitStatus.TECHNICAL_FAILURE
-    proto = err.as_protocol_failure()
+    """ArtifactValidationError conforms to protocol failure taxonomy and distinguishes protocol vs technical."""
+    # Protocol inconsistency error defaults to NEEDS_PROTOCOL_REVISION
+    proto_err = ArtifactProtocolInconsistencyError("Invalid bundle", error_type="ARTIFACT_COUNT_MISMATCH")
+    assert isinstance(proto_err, ArtifactValidationError)
+    assert isinstance(proto_err, ModelValidationError)
+    assert proto_err.stage == FailureStage.ARTIFACT_VALIDATION
+    assert proto_err.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    proto = proto_err.as_protocol_failure()
     assert proto.stage == FailureStage.ARTIFACT_VALIDATION
     assert proto.error_type == "ARTIFACT_COUNT_MISMATCH"
-    assert proto.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+    assert proto.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+
+    # Technical failure error defaults to TECHNICAL_FAILURE
+    tech_err = ArtifactTechnicalFailureError("Disk failure", error_type="ARTIFACT_FILE_READ_ERROR")
+    assert isinstance(tech_err, ArtifactValidationError)
+    assert isinstance(tech_err, ModelValidationError)
+    assert tech_err.stage == FailureStage.ARTIFACT_VALIDATION
+    assert tech_err.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+    tech_proto = tech_err.as_protocol_failure()
+    assert tech_proto.stage == FailureStage.ARTIFACT_VALIDATION
+    assert tech_proto.error_type == "ARTIFACT_FILE_READ_ERROR"
+    assert tech_proto.exit_status == FailureExitStatus.TECHNICAL_FAILURE
 
 
 # --- Inventory and Filename Tests ---
 
 
 def test_missing_artifact_raises() -> None:
-    """Missing any one of the 9 artifacts raises ArtifactValidationError."""
+    """Missing any one of the 9 artifacts raises ARTIFACT_VALIDATION with NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
     del bundle["economic_summary.csv"]
-    with pytest.raises(ArtifactValidationError, match="Missing required artifact"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Missing required artifact" in str(exc_info.value)
 
 
 def test_extra_artifact_raises() -> None:
-    """Extraneous artifact (e.g. failure artifact or tmp file) fails validation."""
+    """Extraneous artifact (e.g. failure artifact or tmp file) fails validation with NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
     bundle["development_run_FAILED.json"] = b'{"status":"FAILED"}'
-    with pytest.raises(ArtifactValidationError, match="Unexpected extra artifact"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Unexpected extra artifact" in str(exc_info.value)
 
 
 # --- Canonical Byte Exactness Tests ---
 
 
 def test_json_byte_exactness_rejection() -> None:
-    """JSON with extra whitespace, keys out of order, or missing LF fails validation."""
+    """JSON with extra whitespace, keys out of order, or missing LF yields NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
 
     # Tamper with formatting of protocol_snapshot.json (e.g. add trailing space before \n)
     tampered = bundle["protocol_snapshot.json"][:-1] + b" \n"
     bundle["protocol_snapshot.json"] = tampered
-    # Re-manifest
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="Canonical JSON byte-exactness mismatch"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Canonical JSON byte-exactness mismatch" in str(exc_info.value)
 
 
 def test_csv_crlf_rejection() -> None:
-    """CSV containing CRLF violates canonical encoding and fails validation."""
+    """CSV containing CRLF violates canonical encoding and yields NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
     raw_csv = bundle["forecast_metrics.csv"]
     tampered_csv = raw_csv.replace(b"\n", b"\r\n")
     bundle["forecast_metrics.csv"] = tampered_csv
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="Canonical CSV byte-exactness mismatch"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Canonical CSV byte-exactness mismatch" in str(exc_info.value)
 
 
 def test_gzip_header_tampering_rejection() -> None:
-    """Gzip header with non-0xff OS byte fails validation."""
+    """Gzip header with non-0xff OS byte fails validation with NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
     raw_gz = bytearray(bundle["daily_forecast_scores.csv.gz"])
     raw_gz[9] = 0x03  # Unix OS instead of 0xff
     bundle["daily_forecast_scores.csv.gz"] = bytes(raw_gz)
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="Gzip fixed header mismatch"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Gzip fixed header mismatch" in str(exc_info.value)
 
 
 def test_gzip_multi_member_rejection() -> None:
-    """Gzip with appended extra member fails validation."""
+    """Gzip with appended extra member fails validation with NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
     raw_gz = bundle["daily_forecast_scores.csv.gz"]
     tampered_gz = raw_gz + raw_gz
     bundle["daily_forecast_scores.csv.gz"] = tampered_gz
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="multiple gzip members"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "multiple gzip members" in str(exc_info.value)
 
 
 # --- Manifest Verification Tests ---
 
 
 def test_manifest_self_inclusion_rejection() -> None:
-    """Manifest cannot include itself."""
+    """Manifest cannot include itself (NEEDS_PROTOCOL_REVISION)."""
     bundle = _create_forecast_failed_bundle()
     data = json.loads(bundle["artifact_manifest.json"].decode("utf-8"))
     data["artifacts"].append({"filename": "artifact_manifest.json", "sha256": "0" * 64, "byte_size": 100})
     from src.m3_digit_factor.serialization import serialize_json
     bundle["artifact_manifest.json"] = serialize_json(data)
 
-    with pytest.raises(ArtifactValidationError, match="Manifest must not contain itself"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Manifest must not contain itself" in str(exc_info.value)
 
 
 def test_manifest_sha256_mismatch_rejection() -> None:
-    """Manifest sha256 mismatch raises ArtifactValidationError."""
+    """Manifest sha256 mismatch raises ARTIFACT_VALIDATION with NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
     data = json.loads(bundle["artifact_manifest.json"].decode("utf-8"))
     data["artifacts"][0]["sha256"] = "f" * 64
     from src.m3_digit_factor.serialization import serialize_json
     bundle["artifact_manifest.json"] = serialize_json(data)
 
-    with pytest.raises(ArtifactValidationError, match="SHA256 mismatch"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "SHA256 mismatch" in str(exc_info.value)
 
 
 def test_manifest_not_lexicographically_sorted_rejection() -> None:
-    """Manifest entries must be sorted lexicographically by filename."""
+    """Manifest entries must be sorted lexicographically by filename (NEEDS_PROTOCOL_REVISION)."""
     bundle = _create_forecast_failed_bundle()
     data = json.loads(bundle["artifact_manifest.json"].decode("utf-8"))
     data["artifacts"].reverse()
     from src.m3_digit_factor.serialization import serialize_json
     bundle["artifact_manifest.json"] = serialize_json(data)
 
-    with pytest.raises(ArtifactValidationError, match="not sorted lexicographically"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "not sorted lexicographically" in str(exc_info.value)
 
 
 # --- Cross-Artifact Consistency Tests ---
 
 
 def test_fingerprint_mismatch_rejection() -> None:
-    """protocol_fingerprint_sha256 must match recomputed fingerprint of authority."""
+    """protocol_fingerprint_sha256 must match recomputed fingerprint of authority (NEEDS_PROTOCOL_REVISION)."""
     bundle = _create_forecast_failed_bundle()
     data = json.loads(bundle["protocol_snapshot.json"].decode("utf-8"))
     data["protocol_fingerprint_sha256"] = "0" * 64
@@ -285,12 +327,15 @@ def test_fingerprint_mismatch_rejection() -> None:
     bundle["protocol_snapshot.json"] = serialize_json(data)
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="Protocol fingerprint mismatch"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Protocol fingerprint mismatch" in str(exc_info.value)
 
 
 def test_forecast_failed_stability_row_violation() -> None:
-    """If forecast gate failed, STABILITY rows in daily scores or metrics fail validation."""
+    """If forecast gate failed, STABILITY rows in daily scores or metrics yield NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
 
     # Add a stability row to forecast_metrics.csv
@@ -302,12 +347,15 @@ def test_forecast_failed_stability_row_violation() -> None:
     bundle["forecast_metrics.csv"] = tampered_metrics
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="STABILITY rows found when forecast gate failed"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "STABILITY rows found when forecast gate failed" in str(exc_info.value)
 
 
 def test_economic_signal_cross_artifact_inconsistency() -> None:
-    """Inconsistency in economic delta or qualified_top_k between artifacts fails validation."""
+    """Inconsistency in economic delta or qualified_top_k between artifacts yields NEEDS_PROTOCOL_REVISION."""
     bundle = _create_economic_signal_bundle()
     data = json.loads(bundle["development_adjudication.json"].decode("utf-8"))
     # Change recommended_top_k to [10] which does not qualify
@@ -316,12 +364,15 @@ def test_economic_signal_cross_artifact_inconsistency() -> None:
     bundle["development_adjudication.json"] = serialize_json(data)
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="recommended_top_k must be a subset of qualified_top_k"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "recommended_top_k must be a subset of qualified_top_k" in str(exc_info.value)
 
 
 def test_economic_summary_point_estimate_mismatch() -> None:
-    """Point estimate discrepancy between economic_summary.csv and economic_uncertainty.json fails."""
+    """Point estimate discrepancy between economic_summary.csv and economic_uncertainty.json yields NEEDS_PROTOCOL_REVISION."""
     bundle = _create_economic_signal_bundle()
     data = json.loads(bundle["economic_uncertainty.json"].decode("utf-8"))
     # Alter K=1 mean_economic_delta
@@ -330,5 +381,64 @@ def test_economic_summary_point_estimate_mismatch() -> None:
     bundle["economic_uncertainty.json"] = serialize_json(data)
     bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
 
-    with pytest.raises(ArtifactValidationError, match="Discrepancy in mean_economic_delta"):
+    with pytest.raises(ArtifactValidationError) as exc_info:
         validate_success_artifacts(bundle)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+    assert "Discrepancy in mean_economic_delta" in str(exc_info.value)
+
+
+# --- Technical Failure Tests ---
+
+
+def test_unexpected_io_read_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unexpected I/O failure while reading artifacts from filesystem yields TECHNICAL_FAILURE."""
+    bundle = _create_forecast_failed_bundle()
+    for fname, b in bundle.items():
+        (tmp_path / fname).write_bytes(b)
+
+    orig_read_bytes = Path.read_bytes
+
+    def _failing_read_bytes(self: Path) -> bytes:
+        if self.name == "economic_summary.csv":
+            raise OSError("Simulated filesystem I/O hardware read error")
+        return orig_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", _failing_read_bytes)
+
+    with pytest.raises(ArtifactTechnicalFailureError) as exc_info:
+        validate_success_artifacts(tmp_path)
+
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+    proto = exc_info.value.as_protocol_failure()
+    assert proto.stage == FailureStage.ARTIFACT_VALIDATION
+    assert proto.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+    assert "Unexpected I/O error reading artifact" in str(exc_info.value)
+
+
+def test_unexpected_gzip_library_failure() -> None:
+    """Unexpected decompression error from corrupt compressed body yields TECHNICAL_FAILURE."""
+    bundle = _create_forecast_failed_bundle()
+    # Keep valid 10-byte fixed header, but append corrupt stream payload that triggers zlib decompression error
+    bundle["daily_forecast_scores.csv.gz"] = GZIP_HEADER_BYTES + b"\xff\xff\xff\xff_corrupt_stream"
+    bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+    with pytest.raises(ArtifactTechnicalFailureError) as exc_info:
+        validate_success_artifacts(bundle)
+
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+    proto = exc_info.value.as_protocol_failure()
+    assert proto.stage == FailureStage.ARTIFACT_VALIDATION
+    assert proto.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+    assert "Unexpected compression library failure" in str(exc_info.value)
+
+
+def test_artifact_directory_not_found(tmp_path: Path) -> None:
+    """Non-existent directory path yields TECHNICAL_FAILURE."""
+    non_existent = tmp_path / "does_not_exist"
+    with pytest.raises(ArtifactTechnicalFailureError) as exc_info:
+        validate_success_artifacts(non_existent)
+    assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
+    assert exc_info.value.exit_status == FailureExitStatus.TECHNICAL_FAILURE
