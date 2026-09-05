@@ -20,6 +20,7 @@ dependencies = [
     "beautifulsoup4==4.14.3",
     "lxml==6.0.2",
     "numpy==2.4.1",
+    "scipy==1.18.0",
     "pandas==3.0.0",
     "pyarrow==23.0.0",
     "matplotlib==3.10.8",
@@ -50,3 +51,6 @@ line-length = 120
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

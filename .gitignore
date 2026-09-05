@@ -145,3 +145,6 @@ auto_runner.log
 # IDE & deploy artifacts
 .zcode/
 .deploy-github-pages/
+
+# M3 research outputs
+research_artifacts/
