@@ -64,6 +64,17 @@ class OptimizerNonConvergence(ModelFitError):
         super().__init__(message, error_type="OptimizerNonConvergence")
 
 
+class OptimizerExecutionError(ModelFitError):
+    """Raised when scipy.optimize.minimize raises an exception before returning a result."""
+
+    stage: FailureStage = FailureStage.MODEL_FIT
+    exit_status: FailureExitStatus = FailureExitStatus.TECHNICAL_FAILURE
+
+    def __init__(self, message: str = "SLSQP optimizer raised an execution exception") -> None:
+        super().__init__(message, error_type="OptimizerExecutionError")
+        self.exit_status = FailureExitStatus.TECHNICAL_FAILURE
+
+
 class NonFiniteModelFit(ModelFitError):
     """Raised when fitted objective or any parameter is non-finite."""
 
@@ -271,7 +282,7 @@ def fit_m3_model(
             },
         )
     except Exception as err:
-        raise ModelFitError(f"SLSQP optimizer raised an unexpected exception: {err}", error_type="TechnicalFailure") from err
+        raise OptimizerExecutionError(f"SLSQP optimizer raised an unexpected exception: {err}") from err
 
     # 3. Post-solver Step 1: Raw solver validity
     if not opt_res.success:

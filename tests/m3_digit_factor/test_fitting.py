@@ -18,6 +18,7 @@ from src.m3_digit_factor.fitting import (
     ForecastContractViolation,
     ModelFitError,
     NonFiniteModelFit,
+    OptimizerExecutionError,
     OptimizerNonConvergence,
     compute_constraint_jacobian,
     compute_constraint_residuals,
@@ -39,6 +40,7 @@ def test_fitting_constants() -> None:
     assert SLSQP_MAXITER == 2000
     assert SLSQP_FTOL == 1e-12
     assert issubclass(OptimizerNonConvergence, ModelFitError)
+    assert issubclass(OptimizerExecutionError, ModelFitError)
     assert issubclass(NonFiniteModelFit, ModelFitError)
     assert issubclass(ConstraintViolation, ModelFitError)
     assert issubclass(ForecastContractViolation, ModelFitError)
@@ -624,4 +626,45 @@ def test_post_fit_order_regression_infeasible_not_repaired_by_canonicalization(
     with pytest.raises(ConstraintViolation) as exc_info:
         fit_m3_model(counts, W=30)
     assert exc_info.value.error_type == "ConstraintViolation"
+
+
+def test_optimizer_execution_exception_boundary_fails_closed_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    solver_call_count = 0
+
+    def mock_crashing_minimize(*args: Any, **kwargs: Any) -> Any:
+        nonlocal solver_call_count
+        solver_call_count += 1
+        raise RuntimeError("Simulated low-level solver crash before returning result")
+
+    monkeypatch.setattr(scipy.optimize, "minimize", mock_crashing_minimize)
+
+    counts = np.full((10, 10), 8, dtype=np.int64)
+    counts[0, :] += 1
+
+    with pytest.raises(OptimizerExecutionError) as exc_info:
+        fit_m3_model(counts, W=30)
+
+    err = exc_info.value
+
+    # Exact failure triplet
+    assert err.stage == FailureStage.MODEL_FIT
+    assert err.error_type == "OptimizerExecutionError"
+    assert err.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+
+    # Protocol failure representation
+    proto = err.as_protocol_failure()
+    assert proto.stage == FailureStage.MODEL_FIT
+    assert proto.error_type == "OptimizerExecutionError"
+    assert proto.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+
+    # Distinct from OptimizerNonConvergence
+    assert not isinstance(err, OptimizerNonConvergence)
+    assert err.error_type != "OptimizerNonConvergence"
+    assert err.exit_status != FailureExitStatus.NEEDS_MODEL_REVISION
+
+    # Exactly one solver call, no retry, no fallback solver
+    assert solver_call_count == 1
+
 
