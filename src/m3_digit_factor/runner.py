@@ -85,6 +85,42 @@ class HistoricalExecutionNotAuthorizedError(RuntimeError):
     """Raised when real historical execution is attempted without Control Plane authorization."""
 
 
+class RunIdValidationError(ValueError):
+    """Raised when run_id violates single safe path component and traversal constraints."""
+
+
+def validate_run_id(run_id: str, output_root: Path) -> str:
+    """Validate that run_id is a single safe path component without traversal.
+
+    Rejects:
+    - Non-string types, empty strings, strings with leading/trailing whitespace
+    - '.' and '..'
+    - Path separators ('/' and '\\') and drive specifiers (':')
+    - Any path resolving outside or not an immediate child of output_root
+    """
+    if not isinstance(run_id, str):
+        raise RunIdValidationError(f'run_id must be a string, got {type(run_id).__name__}')
+
+    if not run_id or run_id.strip() != run_id:
+        raise RunIdValidationError(f'Invalid run_id {run_id!r}: cannot be empty or have surrounding whitespace')
+
+    if run_id in {'.', '..'}:
+        raise RunIdValidationError(f'Invalid run_id {run_id!r}: cannot be "." or ".."')
+
+    if '/' in run_id or '\\' in run_id or ':' in run_id:
+        raise RunIdValidationError(f'Invalid run_id {run_id!r}: path separators and drive specifiers are forbidden')
+
+    out_root_resolved = Path(output_root).resolve()
+    target_path = (out_root_resolved / run_id).resolve()
+
+    if target_path.parent != out_root_resolved or target_path.name != run_id:
+        raise RunIdValidationError(
+            f'Invalid run_id {run_id!r}: must be an immediate single child component beneath output_root'
+        )
+
+    return run_id
+
+
 @dataclass(frozen=True)
 class DevelopmentRunResult:
     """Outcome metadata from an M3 development pipeline execution."""
@@ -180,7 +216,8 @@ def run_development(
         if output_root is not None
         else repo_root / 'research_artifacts' / 'xpis_v3_m3_digit_factor' / 'development'
     )
-    r_id = run_id or datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    r_id = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S') if run_id is None else run_id
+    validate_run_id(r_id, out_root)
     target_dir = out_root / r_id
 
     # Section 22: Existing run directory fail closed
@@ -526,8 +563,8 @@ def run_development(
             published_artifacts=SUCCESS_ARTIFACT_NAMES,
         )
 
-    except (FileExistsError, HistoricalExecutionNotAuthorizedError):
-        # Do not publish failure artifact for target directory collision or safety guard
+    except (FileExistsError, HistoricalExecutionNotAuthorizedError, RunIdValidationError):
+        # Do not publish failure artifact for target directory collision, safety guard, or invalid run_id
         raise
 
     except Exception as exc:

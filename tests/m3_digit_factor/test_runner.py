@@ -45,6 +45,7 @@ import src.m3_digit_factor.economics
 import src.m3_digit_factor.runner
 from src.m3_digit_factor.runner import (
     HistoricalExecutionNotAuthorizedError,
+    RunIdValidationError,
     publish_artifacts,
     run_development,
 )
@@ -420,9 +421,101 @@ class TestTerminalFailurePreservation:
         assert fail_data['development_exit_status'] == FailureExitStatus.NEEDS_PROTOCOL_REVISION.value
         assert fail_data['protocol_snapshot'] is not None
 
+    def test_artifact_protocol_validation_boundary_failure_end_to_end(
+        self, repo_root: Path, real_spec_blob: bytes
+    ) -> None:
+        """Inject ArtifactProtocolInconsistencyError at validation boundary of otherwise valid success bundle.
+
+        Verifies exact triplet:
+        - failed_stage == FailureStage.ARTIFACT_VALIDATION
+        - failure_policy_disposition == 'NEEDS_PROTOCOL_REVISION'
+        - development_exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+        And verifies exactly 0 success files, exactly 1 failure file.
+        """
+        git_runner = _make_git_runner()
+
+        orig_validate = src.m3_digit_factor.runner.validate_artifact_bundle_exclusivity
+
+        def failing_validate_boundary(staging_dir: Any) -> Any:
+            if not (Path(staging_dir) / FAILURE_ARTIFACT_NAME).exists():
+                raise ArtifactProtocolInconsistencyError('Injected checksum violation at validation boundary')
+            return orig_validate(staging_dir)
+
+        with mock.patch(
+            'src.m3_digit_factor.runner.validate_artifact_bundle_exclusivity',
+            side_effect=failing_validate_boundary,
+        ):
+            result = run_development(
+                repository_root=repo_root,
+                output_root=repo_root / 'out',
+                run_id='test_val_boundary_fail',
+                git_runner=git_runner,
+                blob_reader=lambda spec: real_spec_blob,
+                dataset_loader=lambda p: _make_synthetic_dataset(),
+                model_fitter=_mock_fitter,
+            )
+
+        assert result.status == 'FAILED'
+        assert result.exit_status == FailureExitStatus.NEEDS_PROTOCOL_REVISION
+        assert result.published_artifacts == (FAILURE_ARTIFACT_NAME,)
+
+        # Exact triplet verified
+        fail_bytes = (result.output_dir / FAILURE_ARTIFACT_NAME).read_bytes()
+        fail_data = validate_failure_artifact(fail_bytes)
+        assert fail_data['failed_stage'] == FailureStage.ARTIFACT_VALIDATION.value
+        assert fail_data['error_type'] == 'ArtifactProtocolInconsistencyError'
+        assert fail_data['development_exit_status'] == FailureExitStatus.NEEDS_PROTOCOL_REVISION.value
+        assert fail_data['protocol_snapshot'] is not None
+
+        # Output directory must contain exactly 1 failure artifact and exactly 0 success artifacts
+        published_files = [p.name for p in result.output_dir.iterdir()]
+        assert published_files == [FAILURE_ARTIFACT_NAME]
+
 
 class TestPublicationSafetyAndDirectoryMechanics:
     """Verify publication safety, existing directory fail-closed, and atomic isolation."""
+
+    @pytest.mark.parametrize(
+        'bad_run_id',
+        [
+            '',
+            ' ',
+            '   \t\n',
+            '.',
+            '..',
+            '../traversal',
+            '..\\traversal',
+            'foo/bar',
+            'foo\\bar',
+            'nested/path/to/run',
+            '/absolute/posix',
+            '\\absolute\\windows',
+            'C:\\absolute\\drive',
+            'D:/absolute/drive',
+            '\\\\server\\share\\run',
+        ],
+    )
+    def test_run_id_rejects_empty_whitespace_slashes_traversal(
+        self, bad_run_id: str, repo_root: Path, real_spec_blob: bytes
+    ) -> None:
+        """run_id must be a single safe child component without separators, drive specifiers, or traversal."""
+        git_runner = _make_git_runner()
+        out_root = repo_root / 'out'
+        out_root.mkdir(parents=True, exist_ok=True)
+
+        with pytest.raises(RunIdValidationError):
+            run_development(
+                repository_root=repo_root,
+                output_root=out_root,
+                run_id=bad_run_id,
+                git_runner=git_runner,
+                blob_reader=lambda spec: real_spec_blob,
+                dataset_loader=lambda p: _make_synthetic_dataset(),
+                model_fitter=_mock_fitter,
+            )
+
+        # Output root contains NO created directories or files from the bad run
+        assert list(out_root.iterdir()) == []
 
     def test_existing_run_directory_fails_closed_without_modifying_contents(self, repo_root: Path, real_spec_blob: bytes) -> None:
         existing_dir = repo_root / 'out' / 'prior_run'
@@ -445,9 +538,11 @@ class TestPublicationSafetyAndDirectoryMechanics:
         # Prior file preserved untouched
         assert prior_file.read_text() == 'important prior evidence'
         assert not (existing_dir / FAILURE_ARTIFACT_NAME).exists()
+        assert [p.name for p in existing_dir.iterdir()] == ['prior_evidence.txt']
 
     def test_atomic_staging_leaves_no_partial_final_directory_on_failure(self, repo_root: Path) -> None:
-        target_dir = repo_root / 'out' / 'staged_run'
+        out_root = repo_root / 'out'
+        target_dir = out_root / 'staged_run'
         # Pass invalid artifacts that will fail bundle exclusivity validation
         invalid_bundle = {'random_file.txt': b'bad content'}
 
@@ -455,6 +550,9 @@ class TestPublicationSafetyAndDirectoryMechanics:
             publish_artifacts(invalid_bundle, target_dir)
 
         assert not target_dir.exists()
+        # Staging directories starting with .tmp_ must also be cleaned up
+        staging_dirs = [p.name for p in out_root.iterdir() if p.name.startswith('.tmp_')]
+        assert staging_dirs == []
 
     def test_validation_occurs_before_final_publication(self, repo_root: Path, real_spec_blob: bytes) -> None:
         """Verify that validate_success_artifacts runs on the bundle before target_dir is created."""

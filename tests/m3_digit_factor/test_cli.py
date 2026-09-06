@@ -135,3 +135,51 @@ class TestCLIRunnerDispatch:
 
         exit_code = cli.main([])
         assert exit_code == 1
+
+    def test_cli_allowed_options_surface_strictly_bounded(self) -> None:
+        """CLI options surface must contain zero scientific overrides and only allowed runner flags."""
+        parser = cli.build_parser()
+        allowed_flags = {'-h', '--help', '--repository-root', '--output-root', '--run-id', '--authorize-historical-run'}
+        actual_flags = set()
+        for action in parser._actions:
+            actual_flags.update(action.option_strings)
+
+        assert actual_flags == allowed_flags, f'CLI option surface mismatch: {actual_flags} vs {allowed_flags}'
+
+        # Verify no scientific overrides can be passed
+        prohibited_scientific_flags = {'--window', '--seed', '--k', '--csv', '--alpha', '--model'}
+        assert not actual_flags.intersection(prohibited_scientific_flags)
+
+    @pytest.mark.parametrize(
+        'unknown_args',
+        [
+            ['--window', '60'],
+            ['--seed', '20260831'],
+            ['--k', '5'],
+            ['--csv', 'data/xsmb-2-digits.csv'],
+            ['--alpha', '0.05'],
+            ['--unrecognized'],
+            ['-x'],
+        ],
+    )
+    def test_cli_unknown_option_rejection_returns_code_2(self, unknown_args: list[str]) -> None:
+        """CLI must reject unknown options with exit code 2."""
+        exit_code = cli.main(unknown_args)
+        assert exit_code == 2
+
+    @pytest.mark.parametrize(
+        'bad_run_id',
+        [
+            '../traversal',
+            '..\\traversal',
+            'foo/bar',
+            'foo\\bar',
+            '.',
+            '..',
+        ],
+    )
+    def test_cli_invalid_run_id_returns_code_2(self, bad_run_id: str, tmp_path: Path) -> None:
+        """CLI must reject invalid or traversing run_id with exit code 2."""
+        exit_code = cli.main(['--output-root', str(tmp_path), '--run-id', bad_run_id])
+        assert exit_code == 2
+

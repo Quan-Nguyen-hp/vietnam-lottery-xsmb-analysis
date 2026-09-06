@@ -14,6 +14,7 @@ import sys
 
 from src.m3_digit_factor.runner import (
     HistoricalExecutionNotAuthorizedError,
+    RunIdValidationError,
     run_development,
 )
 
@@ -53,7 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(args: list[str] | None = None) -> int:
     """Execute M3 development run from parsed CLI arguments."""
     parser = build_parser()
-    parsed = parser.parse_args(args)
+    try:
+        parsed = parser.parse_args(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
 
     repo_root = parsed.repository_root
     if repo_root is None:
@@ -66,7 +70,7 @@ def main(args: list[str] | None = None) -> int:
             run_id=parsed.run_id,
             authorize_historical_run=parsed.authorize_historical_run,
         )
-    except HistoricalExecutionNotAuthorizedError as exc:
+    except (HistoricalExecutionNotAuthorizedError, RunIdValidationError) as exc:
         print(f'EXECUTION REFUSED: {exc}', file=sys.stderr)
         return 2
     except Exception as exc:
