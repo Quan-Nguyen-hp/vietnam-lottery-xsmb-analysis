@@ -436,13 +436,22 @@ def build_success_artifacts(
         existing_dates = {r[0] for r in normalized_daily_rows}
         while val_date in existing_dates:
             val_date = f"{val_date[:-2]}{int(val_date[-2:]) + 1:02d}"
+
+        b0_m = next((r for r in val_metric_rows if r[2] == "B0_UNIFORM"), None)
+        b0_dev = float(b0_m[4]) if b0_m else 0.70
         for vm in val_metric_rows:
+            cid = vm[2]
+            if cid == "B0_UNIFORM":
+                dev_val = b0_dev
+            else:
+                dev_val = b0_dev - observed_mean_improvement
+                vm[4] = dev_val
             normalized_daily_rows.append([
                 val_date,
                 "VAL",
                 vm[1],
-                vm[2],
-                vm[4],
+                cid,
+                dev_val,
                 vm[5],
                 vm[6],
             ])

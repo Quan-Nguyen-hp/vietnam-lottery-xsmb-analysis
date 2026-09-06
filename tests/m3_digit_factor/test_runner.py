@@ -47,6 +47,7 @@ import src.m3_digit_factor.runner
 from src.m3_digit_factor.runner import (
     ArtifactPublicationError,
     HistoricalExecutionNotAuthorizedError,
+    PostPublicationQuarantineError,
     PostPublicationVerificationError,
     RunIdValidationError,
     _run_development_with_dependencies,
@@ -673,7 +674,7 @@ class TestPublicationSafetyAndDirectoryMechanics:
         assert [p.name for p in out_root.iterdir() if p.name.startswith('.tmp_')] == []
 
     def test_post_publication_inventory_verification(self, repo_root: Path) -> None:
-        """Corrupted or incomplete post-publication directory inventory raises PostPublicationVerificationError."""
+        """Corrupted or incomplete post-publication directory inventory raises and quarantines."""
         out_root = repo_root / 'out'
         target_dir = out_root / 'corrupt_inventory_run'
         valid_bundle = {
@@ -687,23 +688,115 @@ class TestPublicationSafetyAndDirectoryMechanics:
         orig_rename = src.m3_digit_factor.runner.os.rename
 
         def tampered_rename(src_path: str, dst_path: str) -> None:
-            Path(src_path, 'unexpected_extra.bin').write_bytes(b'extra')
+            if '.tmp_' in src_path:
+                Path(src_path, 'unexpected_extra.bin').write_bytes(b'extra')
             orig_rename(src_path, dst_path)
 
         with mock.patch('src.m3_digit_factor.runner.os.rename', side_effect=tampered_rename):
             with pytest.raises(PostPublicationVerificationError, match='Post-publication inventory mismatch'):
                 publish_artifacts(valid_bundle, target_dir)
 
+        # Target directory must NOT exist; must have been quarantined away
+        assert not target_dir.exists()
+        quarantine_dirs = [p for p in out_root.iterdir() if p.name.startswith(f'.quarantine_{target_dir.name}')]
+        assert len(quarantine_dirs) == 1
+        assert quarantine_dirs[0].is_dir()
+        assert (quarantine_dirs[0] / 'unexpected_extra.bin').is_file()
+
+    def test_post_publication_byte_corruption_quarantined(self, repo_root: Path) -> None:
+        """Byte corruption after atomic rename is caught by post-publication revalidation and quarantined."""
+        out_root = repo_root / 'out'
+        target_dir = out_root / 'byte_corrupted_run'
+        valid_bundle = {
+            FAILURE_ARTIFACT_NAME: build_failure_artifact(
+                failed_stage=FailureStage.DATA_VALIDATION,
+                error_type='TEST_ERROR',
+                development_exit_status=FailureExitStatus.NEEDS_DATA_REVISION,
+            )
+        }
+
+        orig_rename = src.m3_digit_factor.runner.os.rename
+
+        def corrupting_rename(src_path: str, dst_path: str) -> None:
+            orig_rename(src_path, dst_path)
+            if '.tmp_' in src_path:
+                # Corrupt bytes of the published artifact in destination
+                corrupt_target = Path(dst_path) / FAILURE_ARTIFACT_NAME
+                corrupt_target.write_bytes(b'{"corrupted_bytes": true}')
+
+        with mock.patch('src.m3_digit_factor.runner.os.rename', side_effect=corrupting_rename):
+            with pytest.raises(PostPublicationVerificationError, match='Post-publication byte validation failed'):
+                publish_artifacts(valid_bundle, target_dir)
+
+        # Target directory must NOT exist; must have been quarantined away
+        assert not target_dir.exists()
+        quarantine_dirs = [p for p in out_root.iterdir() if p.name.startswith(f'.quarantine_{target_dir.name}')]
+        assert len(quarantine_dirs) == 1
+        assert quarantine_dirs[0].is_dir()
+        quarantined_file = quarantine_dirs[0] / FAILURE_ARTIFACT_NAME
+        assert quarantined_file.read_bytes() == b'{"corrupted_bytes": true}'
+
+    def test_valid_publication_no_quarantine(self, repo_root: Path) -> None:
+        """Valid publication leaves target_dir intact with zero quarantine siblings."""
+        out_root = repo_root / 'out'
+        target_dir = out_root / 'valid_run'
+        valid_bundle = {
+            FAILURE_ARTIFACT_NAME: build_failure_artifact(
+                failed_stage=FailureStage.DATA_VALIDATION,
+                error_type='TEST_ERROR',
+                development_exit_status=FailureExitStatus.NEEDS_DATA_REVISION,
+            )
+        }
+
+        published_dir = publish_artifacts(valid_bundle, target_dir)
+        assert published_dir == target_dir
+        assert target_dir.exists()
+        assert (target_dir / FAILURE_ARTIFACT_NAME).is_file()
+
+        quarantine_dirs = [p for p in out_root.iterdir() if p.name.startswith('.quarantine_')]
+        assert quarantine_dirs == []
+        tmp_dirs = [p for p in out_root.iterdir() if p.name.startswith('.tmp_')]
+        assert tmp_dirs == []
+
+    def test_post_publication_quarantine_failure_fails_closed(self, repo_root: Path) -> None:
+        """If quarantining an invalid directory fails, raises PostPublicationQuarantineError."""
+        out_root = repo_root / 'out'
+        target_dir = out_root / 'quarantine_fail_run'
+        valid_bundle = {
+            FAILURE_ARTIFACT_NAME: build_failure_artifact(
+                failed_stage=FailureStage.DATA_VALIDATION,
+                error_type='TEST_ERROR',
+                development_exit_status=FailureExitStatus.NEEDS_DATA_REVISION,
+            )
+        }
+
+        orig_rename = src.m3_digit_factor.runner.os.rename
+
+        def fail_quarantine_rename(src_path: str, dst_path: str) -> None:
+            if '.tmp_' in src_path:
+                Path(src_path, 'unexpected_extra.bin').write_bytes(b'extra')
+                orig_rename(src_path, dst_path)
+            else:
+                raise OSError('Simulated disk failure during quarantine rename')
+
+        with mock.patch('src.m3_digit_factor.runner.os.rename', side_effect=fail_quarantine_rename):
+            with pytest.raises(
+                PostPublicationQuarantineError, match='Failed to quarantine invalid post-publication directory'
+            ):
+                publish_artifacts(valid_bundle, target_dir)
+
     def test_validation_occurs_before_final_publication(self, repo_root: Path, real_spec_blob: bytes) -> None:
         """Verify that validate_success_artifacts runs on the bundle before target_dir is created."""
-        validation_called = False
+        staging_validation_called = False
+        post_validation_called = False
 
         def spy_validator(path_or_bundle: Any) -> Any:
-            nonlocal validation_called
-            validation_called = True
-            # Assert target_dir does not exist yet at the time of validation
+            nonlocal staging_validation_called, post_validation_called
             target = repo_root / 'out' / 'test_val_order'
-            assert not target.exists()
+            if not target.exists():
+                staging_validation_called = True
+            else:
+                post_validation_called = True
             return validate_success_artifacts(path_or_bundle)
 
         git_runner = _make_git_runner()
@@ -718,7 +811,8 @@ class TestPublicationSafetyAndDirectoryMechanics:
                 model_fitter=_mock_fitter,
             )
 
-        assert validation_called is True
+        assert staging_validation_called is True
+        assert post_validation_called is True
         assert result.output_dir.exists()
 
 

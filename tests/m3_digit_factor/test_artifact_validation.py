@@ -704,3 +704,71 @@ class TestAdversarialFailClosedIntegrity:
 
         with pytest.raises(ArtifactValidationError):
             validate_success_artifacts(bundle)
+
+    def test_adversarial_forecast_restart_probability_tiny_drift(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["forecast_uncertainty.json"].decode("utf-8"))
+        data["restart_probability"] = data["restart_probability"] + 5e-13
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["forecast_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError, match="forecast_uncertainty restart_probability mismatch"):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_economic_quantile_tiny_drift(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["economic_uncertainty.json"].decode("utf-8"))
+        data["per_k_alpha"] = data["per_k_alpha"] + 1e-14
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["economic_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError, match="economic_uncertainty per_k_alpha mismatch"):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_forecast_uncertainty_invalid_status(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["forecast_uncertainty.json"].decode("utf-8"))
+        data["status"] = "NOT_EVALUATED_FORECAST_GATE_FAILED"
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["forecast_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError, match="forecast_uncertainty status"):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_observed_mean_improvement_tampered(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["forecast_uncertainty.json"].decode("utf-8"))
+        data["observed_mean_improvement"] = 999.0
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["forecast_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError, match="observed_mean_improvement"):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_bogus_stage_rejected(self) -> None:
+        import csv
+        import gzip
+        from src.m3_digit_factor.artifacts import build_daily_forecast_scores_artifact
+        bundle = _create_economic_signal_bundle()
+
+        decomp = gzip.decompress(bundle["daily_forecast_scores.csv.gz"]).decode("utf-8")
+        daily_reader = list(csv.reader(decomp.splitlines()))
+        daily_rows = daily_reader[1:]
+        daily_rows.append(["2026-01-01", "BOGUS", "B0", "B0_UNIFORM", 0.70, 0.35, 0.45])
+        bundle["daily_forecast_scores.csv.gz"] = build_daily_forecast_scores_artifact(daily_rows)
+
+        metric_csv = bundle["forecast_metrics.csv"].decode("utf-8")
+        metric_reader = list(csv.reader(metric_csv.splitlines()))
+        metric_rows = metric_reader[1:]
+        metric_rows.append(["BOGUS", "B0", "B0_UNIFORM", 1, 0.70, 0.35, 0.45])
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(metric_rows)
+
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+

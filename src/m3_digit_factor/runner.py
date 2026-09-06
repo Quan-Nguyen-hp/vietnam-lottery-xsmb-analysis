@@ -93,7 +93,11 @@ class ArtifactPublicationError(ValueError):
 
 
 class PostPublicationVerificationError(RuntimeError):
-    """Raised when post-publication directory inventory check fails."""
+    """Raised when post-publication directory inventory or integrity check fails."""
+
+
+class PostPublicationQuarantineError(PostPublicationVerificationError):
+    """Raised when quarantining an invalid post-publication directory fails."""
 
 
 def _validate_artifact_key_basename(key: str, staging_dir: Path) -> None:
@@ -200,6 +204,24 @@ def check_clean_working_tree(
         )
 
 
+def _quarantine_final_directory(final_run_dir: Path) -> Path:
+    """Move an invalid published directory away to a quarantine sibling.
+
+    Ensures that final_run_dir does not remain in place upon post-publication failure.
+    Uses atomic same-filesystem rename without copy fallback.
+    """
+    quarantine_dir = (
+        final_run_dir.parent / f'.quarantine_{final_run_dir.name}_{os.getpid()}_{uuid.uuid4().hex[:8]}'
+    )
+    try:
+        os.rename(str(final_run_dir), str(quarantine_dir))
+    except Exception as exc:
+        raise PostPublicationQuarantineError(
+            f'Failed to quarantine invalid post-publication directory {final_run_dir} to {quarantine_dir}: {exc}'
+        ) from exc
+    return quarantine_dir
+
+
 def publish_artifacts(
     artifacts: Mapping[str, bytes],
     output_dir: Path,
@@ -209,7 +231,8 @@ def publish_artifacts(
     Fails closed if output_dir already exists.
     Uses temporary staging directory in output_dir's parent, validates keys as safe basenames,
     writes all files, validates the bundle, and atomically renames to output_dir with no copy fallback.
-    Performs post-publication inventory verification.
+    Performs post-publication inventory verification and byte revalidation.
+    On post-publication failure, quarantines output_dir so no invalid directory remains in place.
     """
     if output_dir.exists():
         raise FileExistsError(f'Target run directory already exists: {output_dir}')
@@ -236,26 +259,40 @@ def publish_artifacts(
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
 
-    # Post-publication inventory verification
-    if not output_dir.is_dir():
-        raise PostPublicationVerificationError(f'Published output directory is not a directory: {output_dir}')
+    try:
+        # Post-publication inventory verification
+        if not output_dir.is_dir():
+            raise PostPublicationVerificationError(f'Published output directory is not a directory: {output_dir}')
 
-    published_items = list(output_dir.iterdir())
-    for item in published_items:
-        if not item.is_file():
-            raise PostPublicationVerificationError(f'Published directory contains non-file item: {item}')
+        published_items = list(output_dir.iterdir())
+        for item in published_items:
+            if not item.is_file():
+                raise PostPublicationVerificationError(f'Published directory contains non-file item: {item}')
 
-    published_names = {item.name for item in published_items}
-    expected_names = set(artifacts.keys())
-    if published_names != expected_names:
-        raise PostPublicationVerificationError(
-            f'Post-publication inventory mismatch: expected {expected_names}, found {published_names}'
-        )
+        published_names = {item.name for item in published_items}
+        expected_names = set(artifacts.keys())
+        if published_names != expected_names:
+            raise PostPublicationVerificationError(
+                f'Post-publication inventory mismatch: expected {expected_names}, found {published_names}'
+            )
 
-    if expected_names != set(SUCCESS_ARTIFACT_NAMES) and expected_names != {FAILURE_ARTIFACT_NAME}:
-        raise PostPublicationVerificationError(
-            f'Post-publication inventory does not match canonical success (9) or failure (1) set: {expected_names}'
-        )
+        if expected_names != set(SUCCESS_ARTIFACT_NAMES) and expected_names != {FAILURE_ARTIFACT_NAME}:
+            raise PostPublicationVerificationError(
+                f'Post-publication inventory does not match canonical success (9) or failure (1) set: {expected_names}'
+            )
+
+        # Complete byte and schema revalidation on published directory
+        try:
+            validate_artifact_bundle_exclusivity(output_dir)
+        except Exception as val_exc:
+            raise PostPublicationVerificationError(
+                f'Post-publication byte validation failed on {output_dir}: {val_exc}'
+            ) from val_exc
+
+    except Exception:
+        if output_dir.exists():
+            _quarantine_final_directory(output_dir)
+        raise
 
     return output_dir
 
