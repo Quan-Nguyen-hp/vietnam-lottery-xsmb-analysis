@@ -29,6 +29,7 @@ from .artifacts import (
     SUCCESS_ARTIFACT_NAMES,
 )
 from .authority import (
+    FROZEN_LITERALS,
     protocol_fingerprint,
     validate_authority,
 )
@@ -45,6 +46,33 @@ from .serialization import (
     serialize_csv,
     serialize_json,
 )
+
+CANDIDATE_WINDOW_MAP: dict[str, int] = {
+    "M3_W030": 30,
+    "M3_W060": 60,
+    "M3_W120": 120,
+    "M3_W240": 240,
+    "M3_W365": 365,
+}
+
+CANDIDATE_MODEL_MAP: dict[str, str] = {
+    "B0_UNIFORM": "B0",
+    "M3_W030": "M3",
+    "M3_W060": "M3",
+    "M3_W120": "M3",
+    "M3_W240": "M3",
+    "M3_W365": "M3",
+}
+
+DEV_REQUIRED_CANDIDATES: list[str] = [
+    "B0_UNIFORM",
+    "M3_W030",
+    "M3_W060",
+    "M3_W120",
+    "M3_W240",
+    "M3_W365",
+]
+
 
 
 NUMERIC_ABS_TOLERANCE: float = 1e-12
@@ -433,6 +461,39 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
             f"forecast_uncertainty.json keys mismatch: expected {expected_fc_keys}, got {set(fc_unc.keys())}",
             error_type="FORECAST_UNCERTAINTY_SCHEMA_ERROR",
         )
+    if fc_unc["status"] not in ("EVALUATED", "NOT_EVALUATED_FORECAST_GATE_FAILED"):
+        raise ArtifactValidationError(
+            f"Invalid forecast_uncertainty status: {fc_unc['status']}",
+            error_type="FORECAST_UNCERTAINTY_STATUS_ERROR",
+        )
+    if fc_unc["bootstrap_rng_implementation"] != FROZEN_LITERALS["forecast_bootstrap_rng_implementation"]:
+        raise ArtifactValidationError(
+            f"forecast_uncertainty bootstrap_rng_implementation mismatch: expected {FROZEN_LITERALS['forecast_bootstrap_rng_implementation']}, got {fc_unc['bootstrap_rng_implementation']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if fc_unc["bootstrap_bit_generator"] != FROZEN_LITERALS["forecast_bootstrap_bit_generator"]:
+        raise ArtifactValidationError(
+            f"forecast_uncertainty bootstrap_bit_generator mismatch: expected {FROZEN_LITERALS['forecast_bootstrap_bit_generator']}, got {fc_unc['bootstrap_bit_generator']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if fc_unc["bootstrap_seed"] != FROZEN_LITERALS["forecast_bootstrap_seed"]:
+        raise ArtifactValidationError(
+            f"forecast_uncertainty bootstrap_seed mismatch: expected {FROZEN_LITERALS['forecast_bootstrap_seed']}, got {fc_unc['bootstrap_seed']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if fc_unc["bootstrap_replications"] != FROZEN_LITERALS["forecast_bootstrap_replications"]:
+        raise ArtifactValidationError(
+            f"forecast_uncertainty bootstrap_replications mismatch: expected {FROZEN_LITERALS['forecast_bootstrap_replications']}, got {fc_unc['bootstrap_replications']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    _compare_floats(float(fc_unc["mean_block_length"]), float(FROZEN_LITERALS["forecast_bootstrap_mean_block_length"]), "forecast mean_block_length")
+    _compare_floats(float(fc_unc["restart_probability"]), float(FROZEN_LITERALS["forecast_bootstrap_restart_probability"]), "forecast restart_probability")
+    _compare_floats(float(fc_unc["alpha"]), float(FROZEN_LITERALS["forecast_bootstrap_alpha"]), "forecast alpha")
+    if fc_unc["quantile_method"] != FROZEN_LITERALS["forecast_bootstrap_quantile_method"]:
+        raise ArtifactValidationError(
+            f"forecast_uncertainty quantile_method mismatch: expected {FROZEN_LITERALS['forecast_bootstrap_quantile_method']}, got {fc_unc['quantile_method']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
 
     # 3. stability_diagnostics.json
     stab_diag = _validate_canonical_json(raw_artifacts["stability_diagnostics.json"], "stability_diagnostics.json")
@@ -440,6 +501,11 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
         raise ArtifactValidationError(
             "stability_diagnostics.json keys mismatch",
             error_type="STABILITY_DIAGNOSTICS_SCHEMA_ERROR",
+        )
+    if stab_diag["status"] not in ("EVALUATED", "NOT_EVALUATED_FORECAST_GATE_FAILED"):
+        raise ArtifactValidationError(
+            f"Invalid stability_diagnostics status: {stab_diag['status']}",
+            error_type="STABILITY_DIAGNOSTICS_STATUS_ERROR",
         )
 
     # 4. economic_uncertainty.json
@@ -463,6 +529,60 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
         raise ArtifactValidationError(
             f"economic_uncertainty.json keys mismatch: expected {expected_econ_keys}, got {set(econ_unc.keys())}",
             error_type="ECONOMIC_UNCERTAINTY_SCHEMA_ERROR",
+        )
+    if econ_unc["status"] not in ("EVALUATED", "NOT_EVALUATED_FORECAST_GATE_FAILED"):
+        raise ArtifactValidationError(
+            f"Invalid economic_uncertainty status: {econ_unc['status']}",
+            error_type="ECONOMIC_UNCERTAINTY_STATUS_ERROR",
+        )
+    _compare_floats(float(econ_unc["familywise_alpha"]), float(FROZEN_LITERALS["economic_familywise_alpha"]), "economic familywise_alpha")
+    if econ_unc["multiplicity_method"] != FROZEN_LITERALS["economic_multiplicity_method"]:
+        raise ArtifactValidationError(
+            f"economic_uncertainty multiplicity_method mismatch: expected {FROZEN_LITERALS['economic_multiplicity_method']}, got {econ_unc['multiplicity_method']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    _compare_floats(float(econ_unc["per_k_alpha"]), float(FROZEN_LITERALS["economic_per_k_alpha"]), "economic per_k_alpha")
+    if econ_unc["bootstrap_rng_implementation"] != FROZEN_LITERALS["economic_bootstrap_rng_implementation"]:
+        raise ArtifactValidationError(
+            f"economic_uncertainty bootstrap_rng_implementation mismatch: expected {FROZEN_LITERALS['economic_bootstrap_rng_implementation']}, got {econ_unc['bootstrap_rng_implementation']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if econ_unc["bootstrap_bit_generator"] != FROZEN_LITERALS["economic_bootstrap_bit_generator"]:
+        raise ArtifactValidationError(
+            f"economic_uncertainty bootstrap_bit_generator mismatch: expected {FROZEN_LITERALS['economic_bootstrap_bit_generator']}, got {econ_unc['bootstrap_bit_generator']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if econ_unc["bootstrap_seed"] != FROZEN_LITERALS["economic_bootstrap_seed"]:
+        raise ArtifactValidationError(
+            f"economic_uncertainty bootstrap_seed mismatch: expected {FROZEN_LITERALS['economic_bootstrap_seed']}, got {econ_unc['bootstrap_seed']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if econ_unc["bootstrap_replications"] != FROZEN_LITERALS["economic_bootstrap_replications"]:
+        raise ArtifactValidationError(
+            f"economic_uncertainty bootstrap_replications mismatch: expected {FROZEN_LITERALS['economic_bootstrap_replications']}, got {econ_unc['bootstrap_replications']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    _compare_floats(float(econ_unc["mean_block_length"]), float(FROZEN_LITERALS["economic_bootstrap_mean_block_length"]), "economic mean_block_length")
+    _compare_floats(float(econ_unc["restart_probability"]), float(FROZEN_LITERALS["economic_bootstrap_restart_probability"]), "economic restart_probability")
+    if econ_unc["quantile_method"] != FROZEN_LITERALS["economic_bootstrap_quantile_method"]:
+        raise ArtifactValidationError(
+            f"economic_uncertainty quantile_method mismatch: expected {FROZEN_LITERALS['economic_bootstrap_quantile_method']}, got {econ_unc['quantile_method']}",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if econ_unc["shared_resample_indices"] is not True:
+        raise ArtifactValidationError(
+            "economic_uncertainty shared_resample_indices must be true",
+            error_type="FROZEN_CONSTANT_MISMATCH",
+        )
+    if not isinstance(econ_unc["per_k"], list) or len(econ_unc["per_k"]) != len(ECONOMIC_K_VALUES):
+        raise ArtifactValidationError(
+            f"economic_uncertainty per_k must be a list of {len(ECONOMIC_K_VALUES)} items",
+            error_type="ECONOMIC_UNCERTAINTY_PER_K_ERROR",
+        )
+    if [item.get("K") for item in econ_unc["per_k"]] != list(ECONOMIC_K_VALUES):
+        raise ArtifactValidationError(
+            f"economic_uncertainty per_k K values mismatch: expected {list(ECONOMIC_K_VALUES)}, got {[item.get('K') for item in econ_unc['per_k']]}",
+            error_type="ECONOMIC_UNCERTAINTY_PER_K_ERROR",
         )
 
     # 5. development_adjudication.json
@@ -489,6 +609,18 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
         raise ArtifactValidationError(
             f"development_adjudication.json status must be 'COMPLETED', got {adjudication['status']}",
             error_type="DEVELOPMENT_ADJUDICATION_STATUS_ERROR",
+        )
+    selected_candidate: str = adjudication["selected_candidate_id"]
+    if selected_candidate not in CANDIDATE_WINDOW_MAP:
+        raise ArtifactValidationError(
+            f"Invalid selected_candidate_id: {selected_candidate}",
+            error_type="INVALID_CANDIDATE_ID",
+        )
+    expected_selected_window = CANDIDATE_WINDOW_MAP[selected_candidate]
+    if adjudication["selected_window_days"] != expected_selected_window:
+        raise ArtifactValidationError(
+            f"candidate/window mismatch: candidate {selected_candidate} declares window {adjudication['selected_window_days']}, expected {expected_selected_window}",
+            error_type="CANDIDATE_WINDOW_MISMATCH",
         )
 
     # 6. forecast_metrics.csv
@@ -536,13 +668,39 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
     manifest_data = _validate_canonical_json(raw_artifacts["artifact_manifest.json"], "artifact_manifest.json")
     _validate_manifest(raw_artifacts, manifest_data)
 
+    # --- Strict Model ID, Candidate ID, and Window Mapping Verification in CSVs ---
+    for row in metric_rows:
+        stg, m_id, c_id = row[0], row[1], row[2]
+        if c_id not in CANDIDATE_MODEL_MAP:
+            raise ArtifactValidationError(
+                f"Unrecognized candidate_id in forecast_metrics.csv: {c_id}",
+                error_type="INVALID_CANDIDATE_ID",
+            )
+        if m_id != CANDIDATE_MODEL_MAP[c_id]:
+            raise ArtifactValidationError(
+                f"model_id mismatch for candidate {c_id} in forecast_metrics.csv: expected {CANDIDATE_MODEL_MAP[c_id]}, got {m_id}",
+                error_type="CANDIDATE_MODEL_MISMATCH",
+            )
+
+    for row in daily_score_rows:
+        _t_date, _stg, m_id, c_id = row[0], row[1], row[2], row[3]
+        if c_id not in CANDIDATE_MODEL_MAP:
+            raise ArtifactValidationError(
+                f"Unrecognized candidate_id in daily_forecast_scores.csv.gz: {c_id}",
+                error_type="INVALID_CANDIDATE_ID",
+            )
+        if m_id != CANDIDATE_MODEL_MAP[c_id]:
+            raise ArtifactValidationError(
+                f"model_id mismatch for candidate {c_id} in daily_forecast_scores.csv.gz: expected {CANDIDATE_MODEL_MAP[c_id]}, got {m_id}",
+                error_type="CANDIDATE_MODEL_MISMATCH",
+            )
+
     # --- Cross-Artifact Consistency Checks ---
     fc_signal: bool = adjudication["forecast_signal"]
     econ_signal: bool = adjudication["economic_signal"]
     exit_status: str = adjudication["development_exit_status"]
     qualified_top_k: list[int] = adjudication["qualified_top_k"]
     recommended_top_k: list[int] = adjudication["recommended_top_k"]
-    selected_candidate: str = adjudication["selected_candidate_id"]
 
     # Recommended must be subset of qualified
     if not set(recommended_top_k).issubset(set(qualified_top_k)):
@@ -563,16 +721,115 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
         "forecast_bootstrap_lower_bound",
     )
 
-    val_m3_rows = [r for r in metric_rows if r[0] == "VAL" and r[1] == "M3"]
-    if val_m3_rows and val_m3_rows[0][2] != selected_candidate:
+    # --- Exact Row Universes in forecast_metrics.csv ---
+    dev_metric_cands = [r[2] for r in metric_rows if r[0] == "DEV"]
+    if dev_metric_cands != DEV_REQUIRED_CANDIDATES:
         raise ArtifactValidationError(
-            f"VAL M3 candidate_id mismatch: expected {selected_candidate}, got {val_m3_rows[0][2]}",
-            error_type="VAL_CANDIDATE_MISMATCH",
+            f"DEV candidate row universe mismatch in forecast_metrics.csv: expected {DEV_REQUIRED_CANDIDATES}, got {dev_metric_cands}",
+            error_type="ROW_UNIVERSE_MISMATCH",
         )
 
-    # Stability rows check in daily scores and forecast metrics
+    val_metric_cands = [r[2] for r in metric_rows if r[0] == "VAL"]
+    expected_val_cands = ["B0_UNIFORM", selected_candidate]
+    if val_metric_cands != expected_val_cands:
+        raise ArtifactValidationError(
+            f"VAL candidate row universe mismatch in forecast_metrics.csv: expected {expected_val_cands}, got {val_metric_cands}",
+            error_type="ROW_UNIVERSE_MISMATCH",
+        )
+
     daily_stability_rows = [r for r in daily_score_rows if r[1] == "STABILITY"]
     metric_stability_rows = [r for r in metric_rows if r[0] == "STABILITY"]
+    stab_metric_cands = [r[2] for r in metric_rows if r[0] == "STABILITY"]
+
+    if not fc_signal and (daily_stability_rows or metric_stability_rows):
+        raise ArtifactValidationError(
+            "STABILITY rows found when forecast gate failed",
+            error_type="FORECAST_GATE_FAILED_INVARIANT_VIOLATION",
+        )
+
+    # --- Date Universes in daily_forecast_scores.csv.gz ---
+    dev_daily_dates = sorted({r[0] for r in daily_score_rows if r[1] == "DEV"})
+    val_daily_dates = sorted({r[0] for r in daily_score_rows if r[1] == "VAL"})
+    stab_daily_dates = sorted({r[0] for r in daily_score_rows if r[1] == "STABILITY"})
+
+    if not dev_daily_dates:
+        raise ArtifactValidationError("No DEV dates represented in daily scores", error_type="MISSING_DEV_DATES")
+    if not val_daily_dates:
+        raise ArtifactValidationError("No VAL dates represented in daily scores", error_type="MISSING_VAL_DATES")
+
+    # Verify every DEV date has all 6 DEV candidates
+    for d in dev_daily_dates:
+        cands = [r[3] for r in daily_score_rows if r[1] == "DEV" and r[0] == d]
+        if cands != DEV_REQUIRED_CANDIDATES:
+            raise ArtifactValidationError(
+                f"DEV daily scores date {d} candidate coverage mismatch: expected {DEV_REQUIRED_CANDIDATES}, got {cands}",
+                error_type="ROW_UNIVERSE_MISMATCH",
+            )
+
+    # Verify every VAL date has exactly B0 and selected_candidate
+    for d in val_daily_dates:
+        cands = [r[3] for r in daily_score_rows if r[1] == "VAL" and r[0] == d]
+        if cands != expected_val_cands:
+            raise ArtifactValidationError(
+                f"VAL daily scores date {d} candidate coverage mismatch: expected {expected_val_cands}, got {cands}",
+                error_type="ROW_UNIVERSE_MISMATCH",
+            )
+
+    # Check date_counts in forecast_metrics.csv match represented unique dates
+    for r in metric_rows:
+        stg = r[0]
+        cnt = int(r[3])
+        if stg == "DEV" and cnt != len(dev_daily_dates):
+            raise ArtifactValidationError(
+                f"DEV date_count in forecast_metrics.csv ({cnt}) does not match represented unique dates ({len(dev_daily_dates)})",
+                error_type="DATE_COUNT_MISMATCH",
+            )
+        if stg == "VAL" and cnt != len(val_daily_dates):
+            raise ArtifactValidationError(
+                f"VAL date_count in forecast_metrics.csv ({cnt}) does not match represented unique dates ({len(val_daily_dates)})",
+                error_type="DATE_COUNT_MISMATCH",
+            )
+        if stg == "STABILITY" and cnt != len(stab_daily_dates):
+            raise ArtifactValidationError(
+                f"STABILITY date_count in forecast_metrics.csv ({cnt}) does not match represented unique dates ({len(stab_daily_dates)})",
+                error_type="DATE_COUNT_MISMATCH",
+            )
+
+    # --- Daily-to-Stage Metric Consistency (Independent Recomputation) ---
+    for row in metric_rows:
+        stg, cid = row[0], row[2]
+        matching = [r for r in daily_score_rows if r[1] == stg and r[3] == cid]
+        if not matching:
+            raise ArtifactValidationError(
+                f"No daily scores found for {stg} {cid}",
+                error_type="MISSING_DAILY_SCORES",
+            )
+        pds = [float(r[4]) for r in matching]
+        maes = [float(r[5]) for r in matching]
+        rmses = [float(r[6]) for r in matching]
+
+        recomputed_pd = sum(pds) / len(pds)
+        recomputed_mae = sum(maes) / len(maes)
+        recomputed_rmse = math.sqrt(sum(x * x for x in rmses) / len(rmses))
+
+        _compare_floats(float(row[4]), recomputed_pd, f"{stg} {cid} PD recomputation")
+        _compare_floats(float(row[5]), recomputed_mae, f"{stg} {cid} MAE recomputation")
+        _compare_floats(float(row[6]), recomputed_rmse, f"{stg} {cid} RMSE recomputation")
+
+    # --- Logical Forecast Gate Independent Recomputation ---
+    val_b0 = next(r for r in metric_rows if r[0] == "VAL" and r[2] == "B0_UNIFORM")
+    val_m3 = next(r for r in metric_rows if r[0] == "VAL" and r[2] == selected_candidate)
+    pd_b0, mae_b0, rmse_b0 = float(val_b0[4]), float(val_b0[5]), float(val_b0[6])
+    pd_m3, mae_m3, rmse_m3 = float(val_m3[4]), float(val_m3[5]), float(val_m3[6])
+
+    bs_lower = float(fc_unc["bootstrap_lower_bound"])
+    recomputed_fc_signal = (pd_m3 < pd_b0) and ((mae_m3 <= mae_b0) or (rmse_m3 <= rmse_b0)) and (bs_lower > 0.0)
+
+    if fc_signal != recomputed_fc_signal:
+        raise ArtifactValidationError(
+            f"Adjudication forecast_signal ({fc_signal}) contradicts recomputed logical gate ({recomputed_fc_signal})",
+            error_type="FORECAST_GATE_ADJUDICATION_MISMATCH",
+        )
 
     if not fc_signal:
         # Forecast gate failed case
@@ -624,18 +881,12 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
                 )
     else:
         # Forecast gate passed case
-        if econ_signal:
-            if exit_status != DevelopmentExitStatus.ECONOMIC_SIGNAL_FOUND.value:
-                raise ArtifactValidationError(
-                    f"Exit status must be ECONOMIC_SIGNAL_FOUND, got {exit_status}",
-                    error_type="INCONSISTENT_EXIT_STATUS",
-                )
-        else:
-            if exit_status != DevelopmentExitStatus.ECONOMIC_GATE_FAILED.value:
-                raise ArtifactValidationError(
-                    f"Exit status must be ECONOMIC_GATE_FAILED, got {exit_status}",
-                    error_type="INCONSISTENT_EXIT_STATUS",
-                )
+        expected_stab_cands = ["B0_UNIFORM", selected_candidate]
+        if stab_metric_cands != expected_stab_cands:
+            raise ArtifactValidationError(
+                f"STABILITY candidate row universe mismatch in forecast_metrics.csv: expected {expected_stab_cands}, got {stab_metric_cands}",
+                error_type="ROW_UNIVERSE_MISMATCH",
+            )
 
         if not daily_stability_rows:
             raise ArtifactValidationError(
@@ -648,18 +899,46 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
                 error_type="MISSING_STABILITY_METRICS",
             )
 
+        # Verify every STABILITY date has exactly B0 and selected_candidate
+        for d in stab_daily_dates:
+            cands = [r[3] for r in daily_score_rows if r[1] == "STABILITY" and r[0] == d]
+            if cands != expected_stab_cands:
+                raise ArtifactValidationError(
+                    f"STABILITY daily scores date {d} candidate coverage mismatch: expected {expected_stab_cands}, got {cands}",
+                    error_type="ROW_UNIVERSE_MISMATCH",
+                )
+
         if stab_diag["status"] != "EVALUATED":
             raise ArtifactValidationError(
                 f"stability_diagnostics status must be EVALUATED, got {stab_diag['status']}",
                 error_type="INCONSISTENT_STABILITY_STATUS",
             )
+        if stab_diag["date_count"] != len(stab_daily_dates):
+            raise ArtifactValidationError(
+                f"stability_diagnostics date_count ({stab_diag['date_count']}) != unique stability dates in daily scores ({len(stab_daily_dates)})",
+                error_type="DATE_COUNT_MISMATCH",
+            )
+
+        blocks = stab_diag.get("blocks", [])
+        if len(blocks) != FROZEN_LITERALS["stability_block_count"]:
+            raise ArtifactValidationError(
+                f"stability_diagnostics blocks count mismatch: expected {FROZEN_LITERALS['stability_block_count']}, got {len(blocks)}",
+                error_type="STABILITY_BLOCK_COUNT_MISMATCH",
+            )
+        sum_block_dates = sum(b.get("date_count", 0) for b in blocks)
+        if sum_block_dates != len(stab_daily_dates):
+            raise ArtifactValidationError(
+                f"Sum of block date_counts ({sum_block_dates}) != unique stability dates ({len(stab_daily_dates)})",
+                error_type="STABILITY_BLOCK_DATE_MISMATCH",
+            )
+
         if econ_unc["status"] != "EVALUATED":
             raise ArtifactValidationError(
                 f"economic_uncertainty status must be EVALUATED, got {econ_unc['status']}",
                 error_type="INCONSISTENT_ECONOMIC_STATUS",
             )
 
-        # Cross check per_k stats between economic_uncertainty, stability_diagnostics, and economic_summary
+        # Cross check per_k stats and recompute qualifications
         econ_unc_map = {item["K"]: item for item in econ_unc["per_k"]}
         stab_diag_map = {item["K"]: item for item in stab_diag["per_k"]}
 
@@ -671,6 +950,13 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
                 raise ArtifactValidationError(
                     f"Missing per-K record for K={k}",
                     error_type="MISSING_PER_K_RECORD",
+                )
+
+            # Check date_count in economic_summary
+            if int(row[2]) != len(stab_daily_dates):
+                raise ArtifactValidationError(
+                    f"economic_summary date_count ({row[2]}) != represented stability dates ({len(stab_daily_dates)})",
+                    error_type="DATE_COUNT_MISMATCH",
                 )
 
             # Check mean_economic_delta
@@ -690,23 +976,78 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
             _compare_floats(row_lb, unc_rec["bootstrap_lower_bound"], f"bootstrap_lower_bound for K={k}")
             _compare_floats(row_lb, diag_rec["bootstrap_lower_bound"], f"stability diag bootstrap_lower_bound for K={k}")
 
-            # Check qualifies
-            row_qualifies = row[7].lower() == "true"
-            if row_qualifies != unc_rec["qualifies"] or row_qualifies != diag_rec["qualifies"]:
+            # Recompute qualification gate predicate
+            delta_val = float(unc_rec["mean_economic_delta"])
+            pos_blks = int(unc_rec["positive_block_count"])
+            lb_val = float(unc_rec["bootstrap_lower_bound"])
+            recomputed_qual = (delta_val > 0.0) and (pos_blks >= 5) and (lb_val > 0.0)
+
+            declared_qual = bool(unc_rec["qualifies"])
+            if declared_qual != recomputed_qual:
                 raise ArtifactValidationError(
-                    f"qualifies mismatch for K={k}",
-                    error_type="CROSS_ARTIFACT_QUALIFIES_MISMATCH",
-                )
-            if row_qualifies != (k in qualified_top_k):
-                raise ArtifactValidationError(
-                    f"qualifies mismatch with adjudication qualified_top_k for K={k}",
-                    error_type="QUALIFIED_TOP_K_MISMATCH",
+                    f"Inconsistent qualifies flag for K={k}: declared {declared_qual} vs recomputed {recomputed_qual}",
+                    error_type="ECONOMIC_QUALIFICATION_MISMATCH",
                 )
 
-            # Check recommended
-            row_recommended = row[8].lower() == "true"
-            if row_recommended != (k in recommended_top_k):
+            # Check qualifies in economic_summary
+            row_qualifies = row[7].lower() == "true"
+            if row_qualifies != recomputed_qual or row_qualifies != diag_rec["qualifies"]:
                 raise ArtifactValidationError(
-                    f"recommended mismatch with adjudication recommended_top_k for K={k}",
+                    f"qualifies mismatch for K={k} in economic_summary",
+                    error_type="CROSS_ARTIFACT_QUALIFIES_MISMATCH",
+                )
+
+        # Recompute expected qualified_top_k
+        expected_qualified_k = [r["K"] for r in econ_unc["per_k"] if r["qualifies"]]
+        if qualified_top_k != expected_qualified_k:
+            raise ArtifactValidationError(
+                f"qualified_top_k in adjudication ({qualified_top_k}) != recomputed qualified K ({expected_qualified_k})",
+                error_type="QUALIFIED_TOP_K_MISMATCH",
+            )
+
+        expected_econ_signal = len(expected_qualified_k) > 0
+        if econ_signal != expected_econ_signal:
+            raise ArtifactValidationError(
+                f"economic_signal in adjudication ({econ_signal}) != expected ({expected_econ_signal})",
+                error_type="ECONOMIC_SIGNAL_MISMATCH",
+            )
+
+        # Recompute expected recommended_top_k
+        if not expected_qualified_k:
+            expected_rec_k: list[int] = []
+        else:
+            qual_records = [r for r in econ_unc["per_k"] if r["qualifies"]]
+            best_rec = max(
+                qual_records,
+                key=lambda r: (float(r["bootstrap_lower_bound"]), float(r["mean_economic_delta"]), -int(r["K"])),
+            )
+            expected_rec_k = [int(best_rec["K"])]
+
+        if recommended_top_k != expected_rec_k:
+            raise ArtifactValidationError(
+                f"recommended_top_k in adjudication ({recommended_top_k}) != expected recommendation ({expected_rec_k})",
+                error_type="RECOMMENDED_TOP_K_MISMATCH",
+            )
+
+        for row in econ_sum_rows:
+            k = int(row[0])
+            row_rec = row[8].lower() == "true"
+            if row_rec != (k in expected_rec_k):
+                raise ArtifactValidationError(
+                    f"recommended flag for K={k} in economic_summary ({row_rec}) != expected ({k in expected_rec_k})",
                     error_type="RECOMMENDED_TOP_K_MISMATCH",
                 )
+
+        if econ_signal:
+            if exit_status != DevelopmentExitStatus.ECONOMIC_SIGNAL_FOUND.value:
+                raise ArtifactValidationError(
+                    f"Exit status must be ECONOMIC_SIGNAL_FOUND, got {exit_status}",
+                    error_type="INCONSISTENT_EXIT_STATUS",
+                )
+        else:
+            if exit_status != DevelopmentExitStatus.ECONOMIC_GATE_FAILED.value:
+                raise ArtifactValidationError(
+                    f"Exit status must be ECONOMIC_GATE_FAILED, got {exit_status}",
+                    error_type="INCONSISTENT_EXIT_STATUS",
+                )
+

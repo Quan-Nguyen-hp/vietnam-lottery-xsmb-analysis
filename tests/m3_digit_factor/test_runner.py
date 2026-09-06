@@ -32,6 +32,7 @@ from src.m3_digit_factor.economics import (
 )
 from src.m3_digit_factor.failure import (
     FAILURE_ARTIFACT_NAME,
+    build_failure_artifact,
     validate_failure_artifact,
 )
 from src.m3_digit_factor.fitting import (
@@ -44,8 +45,11 @@ from src.m3_digit_factor.initialization import (
 import src.m3_digit_factor.economics
 import src.m3_digit_factor.runner
 from src.m3_digit_factor.runner import (
+    ArtifactPublicationError,
     HistoricalExecutionNotAuthorizedError,
+    PostPublicationVerificationError,
     RunIdValidationError,
+    _run_development_with_dependencies,
     publish_artifacts,
     run_development,
 )
@@ -129,7 +133,7 @@ class TestAuthorityAndSourceIdentity:
 
     def test_source_commit_and_tree_captured_in_authority(self, repo_root: Path, real_spec_blob: bytes) -> None:
         git_runner = _make_git_runner()
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_auth_capture',
@@ -148,7 +152,7 @@ class TestAuthorityAndSourceIdentity:
 
     def test_dirty_source_checkout_rejected(self, repo_root: Path, real_spec_blob: bytes) -> None:
         git_runner = _make_git_runner(status=' M modified_file.py')
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_dirty',
@@ -166,7 +170,7 @@ class TestAuthorityAndSourceIdentity:
 
     def test_repository_identity_mismatch_rejected(self, repo_root: Path, real_spec_blob: bytes) -> None:
         git_runner = _make_git_runner(repo_name='other-org/other-repo')
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_repo_mismatch',
@@ -182,7 +186,7 @@ class TestAuthorityAndSourceIdentity:
 
     def test_canonical_data_path_mismatch_rejected(self, repo_root: Path, real_spec_blob: bytes) -> None:
         git_runner = _make_git_runner(data_path='data/wrong_path.csv')
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_data_mismatch',
@@ -199,16 +203,60 @@ class TestAuthorityAndSourceIdentity:
 class TestHistoricalExecutionGuard:
     """Verify safety boundary preventing real historical runs during M3-13."""
 
-    def test_real_historical_run_refused_without_authorization(self, repo_root: Path, real_spec_blob: bytes) -> None:
-        git_runner = _make_git_runner()
-        # dataset_loader is None -> attempts to load canonical dataset
+    def test_real_historical_run_refused_without_authorization(self, repo_root: Path) -> None:
+        """Public run_development rejects execution when authorize_historical_run is False."""
         with pytest.raises(HistoricalExecutionNotAuthorizedError, match='Real historical M3 development execution is NOT authorized'):
             run_development(
                 repository_root=repo_root,
                 output_root=repo_root / 'out',
                 run_id='test_guard',
+                authorize_historical_run=False,
+            )
+
+    def test_historical_authorization_bypass_via_loader_wrapper_refused(self, repo_root: Path, real_spec_blob: bytes) -> None:
+        """Adversarial bypass wrapping load_canonical_dataset fails closed without loading data or fitting models."""
+        git_runner = _make_git_runner()
+        historical_load_call_count = 0
+        model_fit_call_count = 0
+
+        from src.m3_digit_factor.dataset import load_canonical_dataset
+
+        def wrapped_canonical_loader(p: Path) -> CanonicalRawDataset:
+            nonlocal historical_load_call_count
+            historical_load_call_count += 1
+            return load_canonical_dataset(p)
+
+        def spy_fitter(counts: Any, W: int | None = None) -> FittedModelResult:
+            nonlocal model_fit_call_count
+            model_fit_call_count += 1
+            return _mock_fitter(counts, W)
+
+        with pytest.raises(HistoricalExecutionNotAuthorizedError):
+            _run_development_with_dependencies(
+                repository_root=repo_root,
+                output_root=repo_root / 'out',
+                run_id='test_bypass_refused',
                 git_runner=git_runner,
                 blob_reader=lambda spec: real_spec_blob,
+                dataset_loader=wrapped_canonical_loader,
+                model_fitter=spy_fitter,
+                authorize_historical_run=False,
+            )
+
+        assert historical_load_call_count == 0
+        assert model_fit_call_count == 0
+
+    def test_internal_harness_rejects_none_loader_when_unauthorized(self, repo_root: Path, real_spec_blob: bytes) -> None:
+        """Internal harness with dataset_loader=None rejects execution when authorize_historical_run is False."""
+        git_runner = _make_git_runner()
+        with pytest.raises(HistoricalExecutionNotAuthorizedError):
+            _run_development_with_dependencies(
+                repository_root=repo_root,
+                output_root=repo_root / 'out',
+                run_id='test_none_loader_unauthorized',
+                git_runner=git_runner,
+                blob_reader=lambda spec: real_spec_blob,
+                dataset_loader=None,
                 authorize_historical_run=False,
             )
 
@@ -224,7 +272,7 @@ class TestCandidateEvaluationAndFreezing:
             return _mock_fitter(counts, W)
 
         git_runner = _make_git_runner()
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_freeze',
@@ -262,7 +310,7 @@ class TestForecastGateBranching:
             )
 
         git_runner = _make_git_runner()
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_fc_fail',
@@ -319,7 +367,7 @@ class TestForecastGateBranching:
             )
 
         git_runner = _make_git_runner()
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_fc_pass',
@@ -355,7 +403,7 @@ class TestTerminalFailurePreservation:
             raise SVDLeadingSubspaceAmbiguity('Leading singular value gap below threshold')
 
         git_runner = _make_git_runner()
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_svd_fail',
@@ -380,7 +428,7 @@ class TestTerminalFailurePreservation:
             raise OptimizerExecutionError('SLSQP internal solver exception')
 
         git_runner = _make_git_runner()
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_opt_fail',
@@ -403,7 +451,7 @@ class TestTerminalFailurePreservation:
         # Patch build_success_artifacts to inject an invalid schema
         with mock.patch('src.m3_digit_factor.runner.build_success_artifacts') as mock_artifacts_builder:
             mock_artifacts_builder.side_effect = ArtifactProtocolInconsistencyError('Artifact checksum mismatch')
-            result = run_development(
+            result = _run_development_with_dependencies(
                 repository_root=repo_root,
                 output_root=repo_root / 'out',
                 run_id='test_art_fail',
@@ -445,7 +493,7 @@ class TestTerminalFailurePreservation:
             'src.m3_digit_factor.runner.validate_artifact_bundle_exclusivity',
             side_effect=failing_validate_boundary,
         ):
-            result = run_development(
+            result = _run_development_with_dependencies(
                 repository_root=repo_root,
                 output_root=repo_root / 'out',
                 run_id='test_val_boundary_fail',
@@ -504,7 +552,7 @@ class TestPublicationSafetyAndDirectoryMechanics:
         out_root.mkdir(parents=True, exist_ok=True)
 
         with pytest.raises(RunIdValidationError):
-            run_development(
+            _run_development_with_dependencies(
                 repository_root=repo_root,
                 output_root=out_root,
                 run_id=bad_run_id,
@@ -525,7 +573,7 @@ class TestPublicationSafetyAndDirectoryMechanics:
 
         git_runner = _make_git_runner()
         with pytest.raises(FileExistsError, match='Target run directory already exists'):
-            run_development(
+            _run_development_with_dependencies(
                 repository_root=repo_root,
                 output_root=repo_root / 'out',
                 run_id='prior_run',
@@ -554,6 +602,98 @@ class TestPublicationSafetyAndDirectoryMechanics:
         staging_dirs = [p.name for p in out_root.iterdir() if p.name.startswith('.tmp_')]
         assert staging_dirs == []
 
+    @pytest.mark.parametrize(
+        'bad_name',
+        [
+            '',
+            ' ',
+            '.',
+            '..',
+            'a/b',
+            'a\\b',
+            '../x',
+            '..\\x',
+            '/abs',
+            '\\abs',
+            'C:file.txt',
+            ' leading',
+            'trailing ',
+        ],
+    )
+    def test_publish_artifacts_basename_safety(self, repo_root: Path, bad_name: str) -> None:
+        """publish_artifacts validates every key as a single safe basename."""
+        out_dir = repo_root / 'out' / 'test_basename'
+        with pytest.raises(ArtifactPublicationError):
+            publish_artifacts({bad_name: b'content'}, out_dir)
+
+    def test_publication_destination_race_untouched(self, repo_root: Path) -> None:
+        """Injecting competing destination creation before rename fails closed and leaves destination untouched."""
+        out_root = repo_root / 'out'
+        target_dir = out_root / 'competing_run'
+        valid_bundle = {
+            FAILURE_ARTIFACT_NAME: build_failure_artifact(
+                failed_stage=FailureStage.DATA_VALIDATION,
+                error_type='TEST_ERROR',
+                development_exit_status=FailureExitStatus.NEEDS_DATA_REVISION,
+            )
+        }
+
+        orig_rename = src.m3_digit_factor.runner.os.rename
+
+        def inject_race_and_rename(src_path: str, dst_path: str) -> None:
+            target_dir.mkdir(parents=True, exist_ok=False)
+            (target_dir / 'competitor.txt').write_text('competitor_data')
+            orig_rename(src_path, dst_path)
+
+        with mock.patch('src.m3_digit_factor.runner.os.rename', side_effect=inject_race_and_rename):
+            with pytest.raises(FileExistsError):
+                publish_artifacts(valid_bundle, target_dir)
+
+        assert target_dir.exists()
+        assert (target_dir / 'competitor.txt').read_text() == 'competitor_data'
+        assert [p.name for p in target_dir.iterdir()] == ['competitor.txt']
+
+    def test_publication_rename_failure_no_copy_fallback(self, repo_root: Path) -> None:
+        """Rename failure leaves destination absent without attempting any copy fallback."""
+        out_root = repo_root / 'out'
+        target_dir = out_root / 'fail_rename_run'
+        valid_bundle = {
+            FAILURE_ARTIFACT_NAME: build_failure_artifact(
+                failed_stage=FailureStage.DATA_VALIDATION,
+                error_type='TEST_ERROR',
+                development_exit_status=FailureExitStatus.NEEDS_DATA_REVISION,
+            )
+        }
+
+        with mock.patch('src.m3_digit_factor.runner.os.rename', side_effect=OSError('Hardware I/O fault on rename')):
+            with pytest.raises(OSError, match='Hardware I/O fault on rename'):
+                publish_artifacts(valid_bundle, target_dir)
+
+        assert not target_dir.exists()
+        assert [p.name for p in out_root.iterdir() if p.name.startswith('.tmp_')] == []
+
+    def test_post_publication_inventory_verification(self, repo_root: Path) -> None:
+        """Corrupted or incomplete post-publication directory inventory raises PostPublicationVerificationError."""
+        out_root = repo_root / 'out'
+        target_dir = out_root / 'corrupt_inventory_run'
+        valid_bundle = {
+            FAILURE_ARTIFACT_NAME: build_failure_artifact(
+                failed_stage=FailureStage.DATA_VALIDATION,
+                error_type='TEST_ERROR',
+                development_exit_status=FailureExitStatus.NEEDS_DATA_REVISION,
+            )
+        }
+
+        orig_rename = src.m3_digit_factor.runner.os.rename
+
+        def tampered_rename(src_path: str, dst_path: str) -> None:
+            Path(src_path, 'unexpected_extra.bin').write_bytes(b'extra')
+            orig_rename(src_path, dst_path)
+
+        with mock.patch('src.m3_digit_factor.runner.os.rename', side_effect=tampered_rename):
+            with pytest.raises(PostPublicationVerificationError, match='Post-publication inventory mismatch'):
+                publish_artifacts(valid_bundle, target_dir)
+
     def test_validation_occurs_before_final_publication(self, repo_root: Path, real_spec_blob: bytes) -> None:
         """Verify that validate_success_artifacts runs on the bundle before target_dir is created."""
         validation_called = False
@@ -568,7 +708,7 @@ class TestPublicationSafetyAndDirectoryMechanics:
 
         git_runner = _make_git_runner()
         with mock.patch('src.m3_digit_factor.runner.validate_artifact_bundle_exclusivity', side_effect=spy_validator):
-            result = run_development(
+            result = _run_development_with_dependencies(
                 repository_root=repo_root,
                 output_root=repo_root / 'out',
                 run_id='test_val_order',
@@ -635,7 +775,7 @@ class TestOrchestrationOrderingAndStateIsolation:
             return res
 
         with mock.patch('src.m3_digit_factor.runner.evaluate_forecast_gate', side_effect=spy_gate):
-            result = run_development(
+            result = _run_development_with_dependencies(
                 repository_root=repo_root,
                 output_root=repo_root / 'out',
                 run_id='test_call_order',
@@ -677,7 +817,7 @@ class TestOrchestrationOrderingAndStateIsolation:
             return original_econ_bootstrap(delta_matrix)
 
         with mock.patch('src.m3_digit_factor.economics.run_economic_bootstrap', side_effect=spy_econ_bootstrap):
-            result = run_development(
+            result = _run_development_with_dependencies(
                 repository_root=repo_root,
                 output_root=repo_root / 'out',
                 run_id='test_econ_bs_once',
@@ -702,7 +842,7 @@ class TestOrchestrationOrderingAndStateIsolation:
             return _mock_fitter(counts, W)
 
         git_runner = _make_git_runner()
-        result = run_development(
+        result = _run_development_with_dependencies(
             repository_root=repo_root,
             output_root=repo_root / 'out',
             run_id='test_val_freeze_only',

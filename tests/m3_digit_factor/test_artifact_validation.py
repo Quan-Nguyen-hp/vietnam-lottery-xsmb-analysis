@@ -88,8 +88,8 @@ def _create_economic_signal_bundle() -> dict[str, bytes]:
         {
             "block_id": b,
             "start_date": f"2026-03-0{b+1}",
-            "end_date": f"2026-03-1{b+1}",
-            "date_count": 10,
+            "end_date": f"2026-03-0{b+1}",
+            "date_count": 1,
             "per_k": [
                 {"K": 1, "mean_economic_delta": 10.0, "positive": True},
                 {"K": 3, "mean_economic_delta": 15.0, "positive": True},
@@ -99,6 +99,12 @@ def _create_economic_signal_bundle() -> dict[str, bytes]:
         }
         for b in range(6)
     ]
+    stability_daily_rows = []
+    for b in range(6):
+        d_str = f"2026-03-0{b+1}"
+        stability_daily_rows.append([d_str, "STABILITY", "B0", "B0_UNIFORM", 0.70, 0.35, 0.45])
+        stability_daily_rows.append([d_str, "STABILITY", "M3", "M3_W060", 0.69, 0.34, 0.44])
+
     return build_success_artifacts(
         authority=auth,
         selected_candidate_id="M3_W060",
@@ -115,8 +121,7 @@ def _create_economic_signal_bundle() -> dict[str, bytes]:
             ["2026-01-01", "DEV", "M3", "M3_W365", 0.71, 0.36, 0.46],
             ["2026-02-01", "VAL", "B0", "B0_UNIFORM", 0.70, 0.35, 0.45],
             ["2026-02-01", "VAL", "M3", "M3_W060", 0.69, 0.34, 0.44],
-            ["2026-03-01", "STABILITY", "B0", "B0_UNIFORM", 0.70, 0.35, 0.45],
-            ["2026-03-01", "STABILITY", "M3", "M3_W060", 0.69, 0.34, 0.44],
+            *stability_daily_rows,
         ],
         forecast_metric_rows=[
             {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
@@ -127,10 +132,10 @@ def _create_economic_signal_bundle() -> dict[str, bytes]:
             {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
             {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
             {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
-            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
-            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
         ],
-        stability_date_count=60,
+        stability_date_count=6,
         blocks_info=blocks_info,
         per_k_evals=per_k_evals,
         economic_signal=True,
@@ -338,10 +343,16 @@ def test_forecast_failed_stability_row_violation() -> None:
     """If forecast gate failed, STABILITY rows in daily scores or metrics yield NEEDS_PROTOCOL_REVISION."""
     bundle = _create_forecast_failed_bundle()
 
-    # Add a stability row to forecast_metrics.csv
+    # Add a stability row to forecast_metrics.csv while keeping DEV/VAL candidates valid
     tampered_metrics = build_forecast_metrics_artifact([
         {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+        {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+        {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+        {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
         {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+        {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.701, "mae": 0.351, "rmse": 0.451},
         {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
     ])
     bundle["forecast_metrics.csv"] = tampered_metrics
@@ -442,3 +453,254 @@ def test_artifact_directory_not_found(tmp_path: Path) -> None:
         validate_success_artifacts(non_existent)
     assert exc_info.value.stage == FailureStage.ARTIFACT_VALIDATION
     assert exc_info.value.exit_status == FailureExitStatus.TECHNICAL_FAILURE
+
+
+# --- Section 15: Mandatory HIGH-01 Adversarial Remanifested Bundle Tests ---
+
+
+class TestAdversarialFailClosedIntegrity:
+    """Validate that tampered scientific/protocol bundles fail closed even with recomputed manifests."""
+
+    def test_adversarial_wrong_forecast_seed(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["forecast_uncertainty.json"].decode("utf-8"))
+        data["bootstrap_seed"] = 20260312  # Tamper seed
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["forecast_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_wrong_forecast_replication_count(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["forecast_uncertainty.json"].decode("utf-8"))
+        data["bootstrap_replications"] = 9999  # Tamper replications
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["forecast_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_wrong_quantile_method(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["forecast_uncertainty.json"].decode("utf-8"))
+        data["quantile_method"] = "nearest"  # Tamper method away from frozen 'linear'
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["forecast_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_candidate_window_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["development_adjudication.json"].decode("utf-8"))
+        data["selected_window_days"] = 120  # Tamper window days (selected candidate is M3_W060 -> window must be 60)
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["development_adjudication.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_missing_dev_candidate_row(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        # Drop M3_W365 from forecast_metrics.csv
+        rows = [
+            {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            # Missing M3_W365
+            {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        ]
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(rows)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_duplicate_dev_candidate_row(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        rows = [
+            {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
+            {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        ]
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(rows)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_unexpected_val_candidate(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        rows = [
+            {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
+            {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        ]
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(rows)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_date_count_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        rows = [
+            {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
+            {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 999, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 999, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        ]
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(rows)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_daily_to_stage_pd_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        rows = [
+            {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.99, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
+            {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        ]
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(rows)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_daily_to_stage_mae_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        rows = [
+            {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.88, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
+            {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        ]
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(rows)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_daily_to_stage_pooled_rmse_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        rows = [
+            {"stage": "DEV", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.99},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W030", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.68, "mae": 0.33, "rmse": 0.43},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W120", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W240", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "DEV", "model_id": "M3", "candidate_id": "M3_W365", "date_count": 1, "poisson_deviance": 0.71, "mae": 0.36, "rmse": 0.46},
+            {"stage": "VAL", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 1, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "VAL", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 1, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+            {"stage": "STABILITY", "model_id": "B0", "candidate_id": "B0_UNIFORM", "date_count": 6, "poisson_deviance": 0.70, "mae": 0.35, "rmse": 0.45},
+            {"stage": "STABILITY", "model_id": "M3", "candidate_id": "M3_W060", "date_count": 6, "poisson_deviance": 0.69, "mae": 0.34, "rmse": 0.44},
+        ]
+        bundle["forecast_metrics.csv"] = build_forecast_metrics_artifact(rows)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_forecast_gate_adjudication_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["development_adjudication.json"].decode("utf-8"))
+        data["forecast_signal"] = False
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["development_adjudication.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_economic_qualifies_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["economic_uncertainty.json"].decode("utf-8"))
+        for pk in data["per_k"]:
+            if pk["K"] == 10:
+                pk["qualifies"] = True
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["economic_uncertainty.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_economic_signal_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["development_adjudication.json"].decode("utf-8"))
+        data["economic_signal"] = False
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["development_adjudication.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_qualified_top_k_mismatch(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["development_adjudication.json"].decode("utf-8"))
+        data["qualified_top_k"] = [1, 3, 5, 10]
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["development_adjudication.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)
+
+    def test_adversarial_recommended_top_k_selecting_unqualified_k(self) -> None:
+        bundle = _create_economic_signal_bundle()
+        data = json.loads(bundle["development_adjudication.json"].decode("utf-8"))
+        data["recommended_top_k"] = [10]
+        from src.m3_digit_factor.serialization import serialize_json
+        bundle["development_adjudication.json"] = serialize_json(data)
+        bundle["artifact_manifest.json"] = build_artifact_manifest(bundle)
+
+        with pytest.raises(ArtifactValidationError):
+            validate_success_artifacts(bundle)

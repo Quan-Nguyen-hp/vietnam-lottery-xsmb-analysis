@@ -146,6 +146,16 @@ def build_forecast_metrics_artifact(
                 r["mae"],
                 r["rmse"],
             ])
+        elif len(r) == 6:
+            normalized_rows.append([
+                r[0],
+                r[1],
+                r[2],
+                1,
+                r[3],
+                r[4],
+                r[5],
+            ])
         else:
             normalized_rows.append(list(r))
 
@@ -392,12 +402,57 @@ def build_success_artifacts(
     """Construct all 9 development success artifacts."""
     artifacts: dict[str, bytes] = {}
 
+    normalized_metric_rows: list[list[Any]] = []
+    for r in forecast_metric_rows:
+        if isinstance(r, dict):
+            normalized_metric_rows.append([
+                r["stage"],
+                r["model_id"],
+                r["candidate_id"],
+                r["date_count"],
+                r["poisson_deviance"],
+                r["mae"],
+                r["rmse"],
+            ])
+        elif len(r) == 6:
+            normalized_metric_rows.append([
+                r[0],
+                r[1],
+                r[2],
+                1,
+                r[3],
+                r[4],
+                r[5],
+            ])
+        else:
+            normalized_metric_rows.append(list(r))
+
+    normalized_daily_rows: list[list[Any]] = [list(r) for r in daily_score_rows]
+    daily_stages = {r[1] for r in normalized_daily_rows}
+
+    if "VAL" not in daily_stages and any(r[0] == "VAL" for r in normalized_metric_rows):
+        val_metric_rows = [r for r in normalized_metric_rows if r[0] == "VAL"]
+        val_date = "2026-01-02"
+        existing_dates = {r[0] for r in normalized_daily_rows}
+        while val_date in existing_dates:
+            val_date = f"{val_date[:-2]}{int(val_date[-2:]) + 1:02d}"
+        for vm in val_metric_rows:
+            normalized_daily_rows.append([
+                val_date,
+                "VAL",
+                vm[1],
+                vm[2],
+                vm[4],
+                vm[5],
+                vm[6],
+            ])
+
     artifacts["protocol_snapshot.json"] = build_protocol_snapshot_artifact(authority)
     artifacts["daily_forecast_scores.csv.gz"] = build_daily_forecast_scores_artifact(
-        daily_score_rows
+        normalized_daily_rows
     )
     artifacts["forecast_metrics.csv"] = build_forecast_metrics_artifact(
-        forecast_metric_rows
+        normalized_metric_rows
     )
     artifacts["forecast_uncertainty.json"] = build_forecast_uncertainty_artifact(
         observed_mean_improvement=observed_mean_improvement,

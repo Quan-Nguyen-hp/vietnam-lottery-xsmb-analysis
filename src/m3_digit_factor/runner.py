@@ -34,7 +34,6 @@ from .artifacts import (
     build_success_artifacts,
 )
 from .authority import (
-    CANONICAL_DATA_PATH,
     CANONICAL_SPEC_SHA256,
     AuthoritySnapshot,
     AuthorityValidationError,
@@ -87,6 +86,44 @@ class HistoricalExecutionNotAuthorizedError(RuntimeError):
 
 class RunIdValidationError(ValueError):
     """Raised when run_id violates single safe path component and traversal constraints."""
+
+
+class ArtifactPublicationError(ValueError):
+    """Raised when artifact publication constraints or basename safety checks are violated."""
+
+
+class PostPublicationVerificationError(RuntimeError):
+    """Raised when post-publication directory inventory check fails."""
+
+
+def _validate_artifact_key_basename(key: str, staging_dir: Path) -> None:
+    """Validate that artifact key is a single safe basename without path traversal.
+
+    Rejects:
+    - Non-string types, empty strings, strings with leading/trailing whitespace
+    - '.' and '..'
+    - Path separators ('/' and '\\') and drive specifiers (':')
+    - Any path resolving outside or not an immediate child of staging_dir
+    """
+    if not isinstance(key, str):
+        raise ArtifactPublicationError(f"Artifact key must be a string, got {type(key).__name__}")
+
+    if not key or key.strip() != key:
+        raise ArtifactPublicationError(f"Invalid artifact key {key!r}: cannot be empty or have surrounding whitespace")
+
+    if key in {".", ".."}:
+        raise ArtifactPublicationError(f"Invalid artifact key {key!r}: cannot be '.' or '..'")
+
+    if "/" in key or "\\" in key or ":" in key:
+        raise ArtifactPublicationError(f"Invalid artifact key {key!r}: path separators and drive specifiers are forbidden")
+
+    staging_resolved = staging_dir.resolve()
+    target_path = (staging_resolved / key).resolve()
+
+    if target_path.parent != staging_resolved or target_path.name != key:
+        raise ArtifactPublicationError(
+            f"Invalid artifact key {key!r}: must resolve to an immediate child beneath staging directory"
+        )
 
 
 def validate_run_id(run_id: str, output_root: Path) -> str:
@@ -170,8 +207,9 @@ def publish_artifacts(
     """Safely publish an artifact bundle atomically to output_dir.
 
     Fails closed if output_dir already exists.
-    Uses temporary staging directory in output_dir's parent, writes all files,
-    validates the directory, and renames/moves to output_dir.
+    Uses temporary staging directory in output_dir's parent, validates keys as safe basenames,
+    writes all files, validates the bundle, and atomically renames to output_dir with no copy fallback.
+    Performs post-publication inventory verification.
     """
     if output_dir.exists():
         raise FileExistsError(f'Target run directory already exists: {output_dir}')
@@ -182,21 +220,100 @@ def publish_artifacts(
 
     try:
         for name, content in artifacts.items():
+            _validate_artifact_key_basename(name, staging_dir)
             (staging_dir / name).write_bytes(content)
 
         # Validate bundle in staging directory (enforces mutual exclusivity and schema)
         validate_artifact_bundle_exclusivity(staging_dir)
 
-        # Move to target atomically
-        shutil.move(str(staging_dir), str(output_dir))
+        # Pre-rename race check: destination must not already exist
+        if output_dir.exists():
+            raise FileExistsError(f'Target run directory already exists: {output_dir}')
+
+        # Atomic same-filesystem rename without copy fallback
+        os.rename(str(staging_dir), str(output_dir))
     except Exception:
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
+
+    # Post-publication inventory verification
+    if not output_dir.is_dir():
+        raise PostPublicationVerificationError(f'Published output directory is not a directory: {output_dir}')
+
+    published_items = list(output_dir.iterdir())
+    for item in published_items:
+        if not item.is_file():
+            raise PostPublicationVerificationError(f'Published directory contains non-file item: {item}')
+
+    published_names = {item.name for item in published_items}
+    expected_names = set(artifacts.keys())
+    if published_names != expected_names:
+        raise PostPublicationVerificationError(
+            f'Post-publication inventory mismatch: expected {expected_names}, found {published_names}'
+        )
+
+    if expected_names != set(SUCCESS_ARTIFACT_NAMES) and expected_names != {FAILURE_ARTIFACT_NAME}:
+        raise PostPublicationVerificationError(
+            f'Post-publication inventory does not match canonical success (9) or failure (1) set: {expected_names}'
+        )
 
     return output_dir
 
 
 def run_development(
+    repository_root: Path,
+    output_root: Path | None = None,
+    run_id: str | None = None,
+    *,
+    authorize_historical_run: bool = False,
+) -> DevelopmentRunResult:
+    """Execute the production deterministic M3 development run.
+
+    Requires explicit authorize_historical_run=True from Control Plane.
+    Accepts NO dependency injection parameters, ensuring that production execution
+    invariants and lifecycle authority gates cannot be bypassed.
+    """
+    if not authorize_historical_run:
+        raise HistoricalExecutionNotAuthorizedError(
+            'Real historical M3 development execution is NOT authorized by Control Plane. '
+            'Explicit authorization token required.'
+        )
+
+    return _run_development_with_dependencies(
+        repository_root=repository_root,
+        output_root=output_root,
+        run_id=run_id,
+        authorize_historical_run=True,
+    )
+
+
+def _detect_canonical_loader_reference(fn: Any, target_fn: Any) -> bool:
+    """Detect if fn is or directly/indirectly wraps or references target_fn."""
+    if fn is target_fn:
+        return True
+    wrapped = getattr(fn, '__wrapped__', None)
+    if wrapped is not None and _detect_canonical_loader_reference(wrapped, target_fn):
+        return True
+    closure = getattr(fn, '__closure__', None)
+    if closure:
+        for cell in closure:
+            try:
+                val = cell.cell_contents
+            except ValueError:
+                continue
+            if val is target_fn or _detect_canonical_loader_reference(val, target_fn):
+                return True
+    fn_globals = getattr(fn, '__globals__', None)
+    if fn_globals:
+        code = getattr(fn, '__code__', None)
+        if code and 'load_canonical_dataset' in code.co_names:
+            val = fn_globals.get('load_canonical_dataset')
+            if val is target_fn or getattr(val, '__name__', '') == 'load_canonical_dataset':
+                return True
+    return False
+
+
+def _run_development_with_dependencies(
     repository_root: Path,
     output_root: Path | None = None,
     run_id: str | None = None,
@@ -209,7 +326,7 @@ def run_development(
     economic_evaluator: Callable[..., EconomicEvaluationResult] | None = None,
     authorize_historical_run: bool = False,
 ) -> DevelopmentRunResult:
-    """Execute the end-to-end deterministic M3 development run."""
+    """Execute M3 development run with dependency injection (internal test harness only)."""
     repo_root = Path(repository_root).resolve()
     out_root = (
         Path(output_root).resolve()
@@ -240,17 +357,35 @@ def run_development(
         else:
             authority_snapshot = construct_authority_snapshot(repo_root, git_runner=git_runner)
 
-        # 2. Historical execution guard (Section 27)
+        # 2. Historical execution guard (Sections 21-25)
         if not authorize_historical_run:
-            canonical_data_file = repo_root / CANONICAL_DATA_PATH
-            if dataset_loader is None and canonical_data_file.is_file():
+            from . import dataset as _dataset_module
+            orig_canonical_loader = _dataset_module.load_canonical_dataset
+
+            if dataset_loader is None or _detect_canonical_loader_reference(dataset_loader, orig_canonical_loader):
                 raise HistoricalExecutionNotAuthorizedError(
                     'Real historical M3 development execution is NOT authorized by Control Plane. '
-                    'M3-13 authorizes synthetic orchestration and testing only.'
+                    'Synthetic orchestration and testing requires an explicit synthetic dataset_loader.'
                 )
 
-        # 3. Load and validate canonical dataset
-        dataset: CanonicalRawDataset = (dataset_loader or load_canonical_dataset)(repo_root)
+        # 3. Load dataset (with guard against indirect canonical loading if unauthorized)
+        if not authorize_historical_run:
+            from . import dataset as _dataset_module
+            orig_loader = _dataset_module.load_canonical_dataset
+
+            def _forbidden_canonical_load(*args: Any, **kwargs: Any) -> Any:
+                raise HistoricalExecutionNotAuthorizedError(
+                    'Real historical M3 development execution is NOT authorized by Control Plane. '
+                    'Direct or indirect invocation of load_canonical_dataset is forbidden when authorize_historical_run=False.'
+                )
+
+            _dataset_module.load_canonical_dataset = _forbidden_canonical_load
+            try:
+                dataset: CanonicalRawDataset = dataset_loader(repo_root)  # type: ignore[misc]
+            finally:
+                _dataset_module.load_canonical_dataset = orig_loader
+        else:
+            dataset = (dataset_loader or load_canonical_dataset)(repo_root)
 
         # 4 & 5. Derive eligible targets and chronological splits
         splits: ChronologicalSplits = build_chronological_splits(dataset)
@@ -563,8 +698,8 @@ def run_development(
             published_artifacts=SUCCESS_ARTIFACT_NAMES,
         )
 
-    except (FileExistsError, HistoricalExecutionNotAuthorizedError, RunIdValidationError):
-        # Do not publish failure artifact for target directory collision, safety guard, or invalid run_id
+    except (FileExistsError, HistoricalExecutionNotAuthorizedError, RunIdValidationError, PostPublicationVerificationError):
+        # Do not publish failure artifact for target directory collision, safety guard, invalid run_id, or post-publication verification failure
         raise
 
     except Exception as exc:
