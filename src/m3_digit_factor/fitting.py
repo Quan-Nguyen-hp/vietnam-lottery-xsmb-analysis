@@ -22,6 +22,7 @@ from .model import (
     N_OUTCOMES,
     N_TAILS,
     ModelValidationError,
+    compute_eta,
     compute_probabilities,
     forecast_mu,
     pack_parameters,
@@ -145,13 +146,18 @@ def _validate_counts_matrix(counts: Sequence[float] | np.ndarray) -> np.ndarray:
 def compute_objective(theta: np.ndarray, counts: np.ndarray) -> float:
     """Compute negative log-likelihood fitting objective L(theta).
 
-    Formula:
-        L(theta) = - sum_{i=0}^9 sum_{j=0}^9 X[i, j] * ln(p[i, j])
+    Formula (log-sum-exp stabilized identity):
+        T = sum(X)
+        m = max(eta)
+        logZ = m + log(sum(exp(eta - m)))
+        L(theta) = T * logZ - dot(X, eta)
     """
     counts_2d = _validate_counts_matrix(counts)
-    p = compute_probabilities(theta)  # shape (10, 10)
-    # Binary64 log evaluation
-    val = -float(np.sum(counts_2d * np.log(p)))
+    eta = compute_eta(theta)
+    T = float(np.sum(counts_2d))
+    m = float(np.max(eta))
+    logZ = m + math.log(float(np.sum(np.exp(eta - m))))
+    val = float(T * logZ - np.dot(counts_2d.ravel(), eta.ravel()))
     return val
 
 

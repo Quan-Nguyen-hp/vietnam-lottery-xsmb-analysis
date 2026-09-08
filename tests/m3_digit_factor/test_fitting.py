@@ -29,6 +29,8 @@ from src.m3_digit_factor.fitting import (
 from src.m3_digit_factor.initialization import initialize_m3_from_counts
 from src.m3_digit_factor.model import (
     THETA_LENGTH,
+    compute_eta,
+    compute_probabilities,
     pack_parameters,
     unpack_parameters,
 )
@@ -68,6 +70,114 @@ def test_objective_value_against_independent_formula() -> None:
 
     obj_val = compute_objective(theta, counts)
     assert math.isclose(obj_val, expected_nll, rel_tol=1e-14, abs_tol=1e-14)
+
+
+def test_stable_nll_normal_region_equivalence() -> None:
+    """Verify that in the numerically normal region, stable NLL matches legacy mathematical NLL.
+
+    Evaluates multiple deterministic finite parameter states across varied random seeds,
+    scales, and count structures within binary64 floating-point precision.
+    """
+    seeds = [20260901, 20260902, 20260903, 20260904, 20260905]
+    for seed in seeds:
+        rng = np.random.default_rng(seed)
+        a = rng.normal(scale=0.3, size=10)
+        a -= np.mean(a)
+        b = rng.normal(scale=0.3, size=10)
+        b -= np.mean(b)
+        u = rng.normal(scale=0.3, size=10)
+        u -= np.mean(u)
+        u /= np.linalg.norm(u)
+        v = rng.normal(scale=0.3, size=10)
+        v -= np.mean(v)
+        v /= np.linalg.norm(v)
+        gamma = abs(float(rng.normal(loc=1.0, scale=0.5)))
+
+        theta = pack_parameters(a, b, u, v, gamma)
+        p = compute_probabilities(theta)
+        assert np.all(p > 0.0), "Normal region test requires strictly positive probabilities"
+
+        counts_cases = [
+            rng.integers(1, 30, size=(10, 10)).astype(np.float64),
+            np.ones((10, 10), dtype=np.float64) * 8.1,
+            rng.poisson(lam=5.0, size=(10, 10)).astype(np.float64),
+        ]
+        for counts in counts_cases:
+            legacy_nll = -float(np.sum(counts * np.log(p)))
+            stable_nll = compute_objective(theta, counts)
+
+            assert math.isfinite(stable_nll)
+            assert math.isclose(stable_nll, legacy_nll, rel_tol=1e-12, abs_tol=1e-12)
+
+
+def test_stable_nll_pathological_finite_eta_finite_objective() -> None:
+    """Verify that pathological finite eta producing underflow in p yields a strictly finite objective.
+
+    Constructs deterministic finite parameters with large dynamic range where materialized
+    softmax p contains exact binary64 zeros (underflow). Verifies:
+    1. eta is finite across all 100 cells.
+    2. p contains exact binary64 zero(s).
+    3. compute_objective returns a finite float without NaN, +inf, or -inf.
+    """
+    a = np.zeros(10, dtype=np.float64)
+    b = np.zeros(10, dtype=np.float64)
+    u = np.zeros(10, dtype=np.float64)
+    v = np.zeros(10, dtype=np.float64)
+    u[0] = 1.0
+    v[0] = 1.0
+    gamma = 1000.0  # Dynamic range = 1000.0 >> 745 (binary64 underflow threshold)
+
+    theta = pack_parameters(a, b, u, v, gamma)
+    eta = compute_eta(theta)
+
+    # 1. eta must be strictly finite everywhere
+    assert np.all(np.isfinite(eta))
+
+    # 2. Materialized softmax p must contain exact binary64 zeros
+    p = compute_probabilities(theta)
+    assert np.any(p == 0.0)
+
+    # 3. Test across multiple count matrices (dense, sparse with zeros, sparse with counts at underflow cells)
+    counts_all_ones = np.ones((10, 10), dtype=np.float64)
+    counts_sparse = np.zeros((10, 10), dtype=np.float64)
+    counts_sparse[0, 0] = 27.0  # at max cell
+    counts_underflow_hit = np.zeros((10, 10), dtype=np.float64)
+    counts_underflow_hit[1, 1] = 5.0  # at an exact p == 0 underflow cell
+    counts_canonical_draw = np.full((10, 10), 27.0, dtype=np.float64)
+
+    for counts in [counts_all_ones, counts_sparse, counts_underflow_hit, counts_canonical_draw]:
+        obj_val = compute_objective(theta, counts)
+        assert isinstance(obj_val, float)
+        assert math.isfinite(obj_val)
+        assert not math.isnan(obj_val)
+        assert obj_val != float("inf")
+        assert obj_val != float("-inf")
+
+
+def test_analytic_gradient_forensic_safe_region() -> None:
+    """Forensic diagnostic test verifying unchanged analytic gradient matches finite differences."""
+    rng = np.random.default_rng(20260907)
+    a = rng.normal(scale=0.2, size=10)
+    a -= np.mean(a)
+    b = rng.normal(scale=0.2, size=10)
+    b -= np.mean(b)
+    u = rng.normal(scale=0.2, size=10)
+    u -= np.mean(u)
+    u /= np.linalg.norm(u)
+    v = rng.normal(scale=0.2, size=10)
+    v -= np.mean(v)
+    v /= np.linalg.norm(v)
+    gamma = 1.8
+
+    theta = pack_parameters(a, b, u, v, gamma)
+    counts = rng.integers(1, 15, size=(10, 10)).astype(np.float64)
+
+    analytic_grad = compute_objective_jacobian(theta, counts)
+    fd_grad = central_finite_difference_gradient(theta, counts, eps=1e-7)
+
+    assert analytic_grad.shape == (41,)
+    assert np.all(np.isfinite(analytic_grad))
+    assert np.allclose(analytic_grad, fd_grad, rtol=1e-5, atol=1e-5)
 
 
 def central_finite_difference_gradient(
