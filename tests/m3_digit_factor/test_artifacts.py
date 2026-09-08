@@ -72,7 +72,7 @@ def test_protocol_snapshot_artifact_schema_and_fingerprint() -> None:
     data = json.loads(raw_bytes.decode("utf-8"))
 
     assert set(data.keys()) == {"authority", "protocol_fingerprint_sha256"}
-    assert len(data["authority"]) == 72
+    assert len(data["authority"]) == 74
     assert data["protocol_fingerprint_sha256"] == protocol_fingerprint(auth)
 
 
@@ -338,6 +338,8 @@ def test_development_adjudication_exit_status_mappings(
         "qualified_top_k",
         "recommended_top_k",
         "development_exit_status",
+        "complete_valid_candidates",
+        "candidate_qualification",
     }
     assert data["status"] == "COMPLETED"
     assert data["development_exit_status"] == expected_status

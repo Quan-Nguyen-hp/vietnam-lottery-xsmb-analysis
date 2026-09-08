@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -71,6 +71,29 @@ class MetricEvaluationError(ModelValidationError):
             stage=self.stage,
             error_type=self.error_type,
             exit_status=self.exit_status,
+        )
+
+
+class NoCompleteValidDevCandidate(MetricEvaluationError):
+    """Raised when all DEV candidates fail qualification and zero complete valid candidates remain."""
+
+    stage: FailureStage = FailureStage.METRIC_EVALUATION
+    exit_status: FailureExitStatus = FailureExitStatus.NEEDS_MODEL_REVISION
+
+    def __init__(
+        self,
+        message: str = "No complete valid candidates survived DEV evaluation",
+        candidate_qualification: Sequence[Mapping[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_type="NoCompleteValidDevCandidate",
+            exit_status=FailureExitStatus.NEEDS_MODEL_REVISION,
+        )
+        self.candidate_qualification: list[dict[str, Any]] | None = (
+            [dict(c) for c in candidate_qualification]
+            if candidate_qualification is not None
+            else None
         )
 
 
@@ -330,31 +353,42 @@ def select_dev_winner(
       Lower is better on every component. W is the deterministic tie-breaker.
       Exact unrounded binary64 comparison with zero tolerance.
       B0 is never eligible as the M3 winner.
+      Accepts any non-empty subset of CANDIDATE_WINDOWS.
     """
     if isinstance(candidate_metrics, dict):
+        if not candidate_metrics:
+            raise NoCompleteValidDevCandidate("No complete valid candidates survived DEV evaluation")
+        extra_windows = set(candidate_metrics.keys()) - set(CANDIDATE_WINDOWS)
+        if extra_windows:
+            raise MetricEvaluationError(
+                f"Candidate metrics contain unknown windows: {sorted(extra_windows)}"
+            )
         evaluations: list[CandidateEvaluation] = []
         for w in CANDIDATE_WINDOWS:
-            if w not in candidate_metrics:
-                raise MetricEvaluationError(
-                    f"Candidate universe must contain exactly {CANDIDATE_WINDOWS}, missing window {w}"
+            if w in candidate_metrics:
+                evaluations.append(
+                    CandidateEvaluation(
+                        window=w,
+                        candidate_id=candidate_id_for_window(w),
+                        dev_metrics=candidate_metrics[w],
+                    )
                 )
-            evaluations.append(
-                CandidateEvaluation(
-                    window=w,
-                    candidate_id=candidate_id_for_window(w),
-                    dev_metrics=candidate_metrics[w],
-                )
-            )
     else:
         evaluations = list(candidate_metrics)
+        if not evaluations:
+            raise NoCompleteValidDevCandidate("No complete valid candidates survived DEV evaluation")
         windows = {e.window for e in evaluations}
-        if windows != set(CANDIDATE_WINDOWS):
+        invalid_windows = windows - set(CANDIDATE_WINDOWS)
+        if invalid_windows:
             raise MetricEvaluationError(
-                f"Candidate universe must contain exactly windows {CANDIDATE_WINDOWS}, got {windows}"
+                f"Candidate evaluations contain invalid windows: {sorted(invalid_windows)}"
             )
         for e in evaluations:
             if e.candidate_id == CandidateID.B0_UNIFORM:
                 raise MetricEvaluationError("B0 baseline is not eligible as an M3 candidate winner")
+
+    if not evaluations:
+        raise NoCompleteValidDevCandidate("No complete valid candidates survived DEV evaluation")
 
     winner = min(
         evaluations,

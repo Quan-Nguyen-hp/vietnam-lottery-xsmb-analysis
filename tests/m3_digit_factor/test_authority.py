@@ -29,15 +29,17 @@ EXPECTED_AUTHORITY = {
     'data_source_commit': 'd' * 40,
     'data_source_blob': 'e' * 40,
     'data_source_sha256': 'f' * 64,
-    'artifact_contract_version': 'XPIS_V3_M3_ARTIFACT_CONTRACT_V1',
+    'protocol_revision_source': 'CONTROL_PLANE_POST_DEV_FAILURE_REVISION',
+    'dev_candidate_qualification_policy': 'COMPLETE_VALID_OR_DISQUALIFIED_FAIL_CLOSED_NO_PARTIAL',
+    'artifact_contract_version': 'XPIS_V3_M3_ARTIFACT_CONTRACT_V2',
     'model_contract_version': 'XPIS_V3_M3_MODEL_CP1',
     'data_split_contract_version': 'XPIS_V3_M3_DATA_SPLIT_CP1',
-    'candidate_contract_version': 'XPIS_V3_M3_CANDIDATE_CP1',
+    'candidate_contract_version': 'XPIS_V3_M3_CANDIDATE_CP2',
     'forecast_gate_contract_version': 'XPIS_V3_M3_FORECAST_GATE_CP1',
     'forecast_bootstrap_contract_version': 'XPIS_V3_M3_FORECAST_BOOTSTRAP_CP1',
     'economic_contract_version': 'XPIS_V3_M3_ECONOMIC_CP1',
     'success_artifact_schema_version': 'XPIS_V3_M3_SUCCESS_ARTIFACTS_CP1',
-    'failure_artifact_schema_version': 'XPIS_V3_M3_FAILURE_ARTIFACT_CP1',
+    'failure_artifact_schema_version': 'XPIS_V3_M3_FAILURE_ARTIFACT_CP2',
     'metric_definition_version': 'XPIS_V3_METRICS_V1',
     'poisson_log_base': 'NATURAL',
     'poisson_outcome_aggregation': 'MEAN_OVER_100_OUTCOMES',
@@ -93,7 +95,7 @@ EXPECTED_AUTHORITY = {
     'economic_uncertainty_allowed_statuses': ['NOT_EVALUATED_FORECAST_GATE_FAILED', 'EVALUATED'],
 }
 
-GOLDEN_FINGERPRINT = '7a8cf89bb8fce581d5eac8562ac7795a671c9a9458f221b09fd41bffa4719b98'
+GOLDEN_FINGERPRINT = '197631ae43dd6d0deb8f5b92a257d4ef42ce05de883acb027c360e30343e65e9'
 
 
 def make_identity(**overrides: object) -> RepositoryIdentity:
@@ -115,8 +117,8 @@ def valid_authority() -> dict[str, object]:
 
 
 def test_authority_key_fixture_is_independent_complete_and_unique():
-    assert len(EXPECTED_AUTHORITY) == 72
-    assert len(set(EXPECTED_AUTHORITY)) == 72
+    assert len(EXPECTED_AUTHORITY) == 74
+    assert len(set(EXPECTED_AUTHORITY)) == 74
 
 
 def test_builder_preserves_the_exact_locked_authority_literals():

@@ -57,6 +57,15 @@ class CandidateID(str, Enum):
     M3_W365 = 'M3_W365'
 
 
+class CandidateStatus(str, Enum):
+    """Closed qualification statuses for DEV candidates under P3 protocol."""
+
+    COMPLETE_VALID = 'COMPLETE_VALID'
+    DISQUALIFIED_MODEL_INITIALIZATION = 'DISQUALIFIED_MODEL_INITIALIZATION'
+    DISQUALIFIED_MODEL_FIT = 'DISQUALIFIED_MODEL_FIT'
+    DISQUALIFIED_FORECAST_CONTRACT = 'DISQUALIFIED_FORECAST_CONTRACT'
+
+
 class DevelopmentStage(str, Enum):
     """Closed chronological stages used in development artifacts."""
 

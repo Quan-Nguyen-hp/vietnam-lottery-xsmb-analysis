@@ -26,15 +26,17 @@ FROZEN_LITERALS: Mapping[str, object] = MappingProxyType({
     'authority_provenance': 'RECONSTRUCTED_FROM_SURVIVING_APPROVED_ARTIFACTS_REPOSITORY_EVIDENCE_AND_CONTROL_PLANE_ADJUDICATION',
     'data_source_repository': EXPECTED_REPOSITORY,
     'data_source_path': CANONICAL_DATA_PATH,
-    'artifact_contract_version': 'XPIS_V3_M3_ARTIFACT_CONTRACT_V1',
+    'protocol_revision_source': 'CONTROL_PLANE_POST_DEV_FAILURE_REVISION',
+    'dev_candidate_qualification_policy': 'COMPLETE_VALID_OR_DISQUALIFIED_FAIL_CLOSED_NO_PARTIAL',
+    'artifact_contract_version': 'XPIS_V3_M3_ARTIFACT_CONTRACT_V2',
     'model_contract_version': 'XPIS_V3_M3_MODEL_CP1',
     'data_split_contract_version': 'XPIS_V3_M3_DATA_SPLIT_CP1',
-    'candidate_contract_version': 'XPIS_V3_M3_CANDIDATE_CP1',
+    'candidate_contract_version': 'XPIS_V3_M3_CANDIDATE_CP2',
     'forecast_gate_contract_version': 'XPIS_V3_M3_FORECAST_GATE_CP1',
     'forecast_bootstrap_contract_version': 'XPIS_V3_M3_FORECAST_BOOTSTRAP_CP1',
     'economic_contract_version': 'XPIS_V3_M3_ECONOMIC_CP1',
     'success_artifact_schema_version': 'XPIS_V3_M3_SUCCESS_ARTIFACTS_CP1',
-    'failure_artifact_schema_version': 'XPIS_V3_M3_FAILURE_ARTIFACT_CP1',
+    'failure_artifact_schema_version': 'XPIS_V3_M3_FAILURE_ARTIFACT_CP2',
     'metric_definition_version': 'XPIS_V3_METRICS_V1',
     'poisson_log_base': 'NATURAL',
     'poisson_outcome_aggregation': 'MEAN_OVER_100_OUTCOMES',
@@ -161,8 +163,8 @@ def validate_authority(authority: Mapping[str, object]) -> None:
         raise AuthorityValidationError(f'authority has missing keys: {sorted(missing)!r}')
     if extra:
         raise AuthorityValidationError(f'authority has extra keys: {sorted(extra)!r}')
-    if len(authority) != 72:
-        raise AuthorityValidationError('authority must contain exactly 72 unique keys')
+    if len(authority) != 74:
+        raise AuthorityValidationError('authority must contain exactly 74 unique keys')
 
     _require_hex(authority['canonical_spec_sha256'], field='canonical_spec_sha256', size=64)
     if authority['canonical_spec_sha256'] != CANONICAL_SPEC_SHA256:

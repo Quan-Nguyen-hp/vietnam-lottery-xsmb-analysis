@@ -49,9 +49,11 @@ from .bootstrap import (
 )
 from .contracts import (
     CandidateID,
+    CandidateStatus,
     DevelopmentExitStatus,
     DevelopmentStage,
     FailureExitStatus,
+    FailureStage,
     ModelID,
 )
 from .dataset import CanonicalRawDataset, load_canonical_dataset
@@ -65,10 +67,23 @@ from .failure import (
     build_failure_artifact_from_exception,
     validate_artifact_bundle_exclusivity,
 )
-from .fitting import FittedModelResult, fit_m3_model
+from .fitting import (
+    ConstraintViolation,
+    FittedModelResult,
+    ForecastContractViolation as FittingForecastContractViolation,
+    NonFiniteModelFit,
+    OptimizerNonConvergence,
+    fit_m3_model,
+)
+from .initialization import (
+    CenteredSingularVectorDegeneracy,
+    SVDLeadingSubspaceAmbiguity,
+    ZeroDigitMarginal,
+)
 from .metrics import (
     CANDIDATE_WINDOWS,
     DailyForecastMetrics,
+    NoCompleteValidDevCandidate,
     StageForecastMetrics,
     candidate_id_for_window,
     compute_daily_metrics,
@@ -77,6 +92,7 @@ from .metrics import (
     evaluate_forecast_gate,
     select_dev_winner,
 )
+from .model import ForecastContractViolation as ModelForecastContractViolation
 from .splits import ChronologicalSplits, build_chronological_splits
 
 
@@ -461,40 +477,102 @@ def _run_development_with_dependencies(
             'rmse': b0_dev_stage.rmse,
         })
 
-        # 7. Evaluate all five M3 candidates on DEV
+        # 7. Evaluate all five M3 candidates on DEV with candidate-local fail-closed handling
         dev_stage_metrics: dict[int, StageForecastMetrics] = {}
+        complete_valid_candidates: list[str] = []
+        candidate_qualification: list[dict[str, Any]] = []
+
+        CANDIDATE_LOCAL_SCIENTIFIC_EXCEPTIONS = (
+            ZeroDigitMarginal,
+            SVDLeadingSubspaceAmbiguity,
+            CenteredSingularVectorDegeneracy,
+            OptimizerNonConvergence,
+            NonFiniteModelFit,
+            ConstraintViolation,
+            FittingForecastContractViolation,
+            ModelForecastContractViolation,
+        )
+
         for W in CANDIDATE_WINDOWS:
             c_id = candidate_id_for_window(W)
             c_id_str = c_id.value if hasattr(c_id, 'value') else str(c_id)
-            m3_dev_daily: list[DailyForecastMetrics] = []
+            m3_dev_daily_buffer: list[DailyForecastMetrics] = []
+            daily_score_rows_buffer: list[list[Any]] = []
+            candidate_failed = False
+
             for t in dev_indices:
                 counts = np.sum(dataset.count_matrix[t - W : t], axis=0)
-                fit_res = (model_fitter or fit_m3_model)(counts, W=W)
-                y_t = dataset.count_matrix[t]
-                m_m3 = compute_daily_metrics(y_t, fit_res.mu)
-                m3_dev_daily.append(m_m3)
-                daily_score_rows.append([
-                    str(dataset.recorded_dates[t]),
-                    DevelopmentStage.DEV.value,
-                    ModelID.M3.value,
-                    c_id_str,
-                    m_m3.poisson_deviance,
-                    m_m3.mae,
-                    m_m3.rmse,
-                ])
-            stage_m = compute_stage_metrics(m3_dev_daily)
-            dev_stage_metrics[W] = stage_m
-            forecast_metric_rows.append({
-                'stage': DevelopmentStage.DEV.value,
-                'model_id': ModelID.M3.value,
-                'candidate_id': c_id_str,
-                'date_count': splits.N_dev,
-                'poisson_deviance': stage_m.poisson_deviance,
-                'mae': stage_m.mae,
-                'rmse': stage_m.rmse,
-            })
+                try:
+                    fit_res = (model_fitter or fit_m3_model)(counts, W=W)
+                    y_t = dataset.count_matrix[t]
+                    m_m3 = compute_daily_metrics(y_t, fit_res.mu)
+                    m3_dev_daily_buffer.append(m_m3)
+                    daily_score_rows_buffer.append([
+                        str(dataset.recorded_dates[t]),
+                        DevelopmentStage.DEV.value,
+                        ModelID.M3.value,
+                        c_id_str,
+                        m_m3.poisson_deviance,
+                        m_m3.mae,
+                        m_m3.rmse,
+                    ])
+                except CANDIDATE_LOCAL_SCIENTIFIC_EXCEPTIONS as exc:
+                    candidate_failed = True
+                    if isinstance(exc, (ZeroDigitMarginal, SVDLeadingSubspaceAmbiguity, CenteredSingularVectorDegeneracy)):
+                        cand_status = CandidateStatus.DISQUALIFIED_MODEL_INITIALIZATION.value
+                    elif isinstance(exc, (FittingForecastContractViolation, ModelForecastContractViolation)):
+                        cand_status = CandidateStatus.DISQUALIFIED_FORECAST_CONTRACT.value
+                    else:
+                        cand_status = CandidateStatus.DISQUALIFIED_MODEL_FIT.value
+
+                    stage_obj = getattr(exc, 'stage', FailureStage.MODEL_FIT)
+                    failure_stage_val = stage_obj.value if hasattr(stage_obj, 'value') else str(stage_obj)
+                    error_type_val = getattr(exc, 'error_type', type(exc).__name__)
+
+                    candidate_qualification.append({
+                        'candidate_id': c_id_str,
+                        'W': W,
+                        'status': cand_status,
+                        'failure_stage': failure_stage_val,
+                        'error_type': error_type_val,
+                        'first_failed_target_index': int(t),
+                        'first_failed_target_date': str(dataset.recorded_dates[t]),
+                    })
+                    m3_dev_daily_buffer.clear()
+                    daily_score_rows_buffer.clear()
+                    break
+
+            if not candidate_failed:
+                stage_m = compute_stage_metrics(m3_dev_daily_buffer)
+                dev_stage_metrics[W] = stage_m
+                daily_score_rows.extend(daily_score_rows_buffer)
+                forecast_metric_rows.append({
+                    'stage': DevelopmentStage.DEV.value,
+                    'model_id': ModelID.M3.value,
+                    'candidate_id': c_id_str,
+                    'date_count': splits.N_dev,
+                    'poisson_deviance': stage_m.poisson_deviance,
+                    'mae': stage_m.mae,
+                    'rmse': stage_m.rmse,
+                })
+                complete_valid_candidates.append(c_id_str)
+                candidate_qualification.append({
+                    'candidate_id': c_id_str,
+                    'W': W,
+                    'status': CandidateStatus.COMPLETE_VALID.value,
+                    'failure_stage': None,
+                    'error_type': None,
+                    'first_failed_target_index': None,
+                    'first_failed_target_date': None,
+                })
 
         # 8 & 9. Select DEV winner and freeze
+        if len(complete_valid_candidates) == 0:
+            raise NoCompleteValidDevCandidate(
+                "No complete valid candidates survived DEV evaluation",
+                candidate_qualification=candidate_qualification,
+            )
+
         dev_winner = select_dev_winner(dev_stage_metrics)
         winner_window = dev_winner.window
         winner_candidate_id = (
@@ -593,6 +671,8 @@ def _run_development_with_dependencies(
                 observed_mean_improvement=observed_mean_improvement,
                 daily_score_rows=daily_score_rows,
                 forecast_metric_rows=forecast_metric_rows,
+                complete_valid_candidates=complete_valid_candidates,
+                candidate_qualification=candidate_qualification,
             )
             publish_artifacts(success_artifacts, target_dir)
             return DevelopmentRunResult(
@@ -715,6 +795,8 @@ def _run_development_with_dependencies(
             economic_signal=econ_res.economic_signal,
             qualified_top_k=econ_res.qualified_top_k,
             recommended_top_k=econ_res.recommended_top_k,
+            complete_valid_candidates=complete_valid_candidates,
+            candidate_qualification=candidate_qualification,
         )
         publish_artifacts(success_artifacts, target_dir)
 

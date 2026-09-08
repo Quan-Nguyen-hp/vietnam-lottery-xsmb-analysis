@@ -141,7 +141,7 @@ class TestFailurePayloadAndArtifact:
         )
         assert payload["protocol_snapshot"] is not None
         assert set(payload["protocol_snapshot"].keys()) == {"authority", "protocol_fingerprint_sha256"}
-        assert len(payload["protocol_snapshot"]["authority"]) == 72
+        assert len(payload["protocol_snapshot"]["authority"]) == 74
         assert len(payload["protocol_snapshot"]["protocol_fingerprint_sha256"]) == 64
 
     def test_canonical_byte_exactness(self) -> None:
@@ -527,3 +527,125 @@ class TestArtifactBundleMutualExclusivity:
         (tmp_path / "extra.txt").write_text("rogue")
         with pytest.raises(FailureValidationError, match="Unexpected extra"):
             validate_failure_artifacts(tmp_path)
+
+
+class TestZeroSurvivorFailureArtifact:
+    """Verify exact 6-key schema and fail-closed validation for NoCompleteValidDevCandidate."""
+
+    @staticmethod
+    def _sample_zero_survivor_qualification() -> list[dict[str, Any]]:
+        return [
+            {
+                "candidate_id": "M3_W030",
+                "W": 30,
+                "status": "DISQUALIFIED_MODEL_FIT",
+                "failure_stage": "MODEL_FIT",
+                "error_type": "OptimizerNonConvergence",
+                "first_failed_target_index": 10,
+                "first_failed_target_date": "2018-01-15",
+            },
+            {
+                "candidate_id": "M3_W060",
+                "W": 60,
+                "status": "DISQUALIFIED_MODEL_FIT",
+                "failure_stage": "MODEL_FIT",
+                "error_type": "NonFiniteModelFit",
+                "first_failed_target_index": 20,
+                "first_failed_target_date": "2018-02-15",
+            },
+            {
+                "candidate_id": "M3_W120",
+                "W": 120,
+                "status": "DISQUALIFIED_MODEL_INITIALIZATION",
+                "failure_stage": "MODEL_INITIALIZATION",
+                "error_type": "ZeroDigitMarginal",
+                "first_failed_target_index": 30,
+                "first_failed_target_date": "2018-03-15",
+            },
+            {
+                "candidate_id": "M3_W240",
+                "W": 240,
+                "status": "DISQUALIFIED_FORECAST_CONTRACT",
+                "failure_stage": "MODEL_FIT",
+                "error_type": "ForecastContractViolation",
+                "first_failed_target_index": 40,
+                "first_failed_target_date": "2018-04-15",
+            },
+            {
+                "candidate_id": "M3_W365",
+                "W": 365,
+                "status": "DISQUALIFIED_MODEL_FIT",
+                "failure_stage": "MODEL_FIT",
+                "error_type": "ConstraintViolation",
+                "first_failed_target_index": 50,
+                "first_failed_target_date": "2018-05-15",
+            },
+        ]
+
+    def test_zero_survivor_6_key_payload(self) -> None:
+        qual = self._sample_zero_survivor_qualification()
+        snap = _sample_authority_snapshot()
+        payload = build_failure_payload(
+            failed_stage=FailureStage.METRIC_EVALUATION,
+            error_type="NoCompleteValidDevCandidate",
+            development_exit_status=FailureExitStatus.NEEDS_MODEL_REVISION,
+            protocol_snapshot=snap,
+            candidate_qualification=qual,
+        )
+        assert set(payload.keys()) == {
+            "status",
+            "failed_stage",
+            "error_type",
+            "development_exit_status",
+            "candidate_qualification",
+            "protocol_snapshot",
+        }
+        assert payload["status"] == "FAILED"
+        assert payload["failed_stage"] == "METRIC_EVALUATION"
+        assert payload["error_type"] == "NoCompleteValidDevCandidate"
+        assert payload["development_exit_status"] == "NEEDS_MODEL_REVISION"
+        assert len(payload["candidate_qualification"]) == 5
+
+    def test_zero_survivor_artifact_validation_roundtrip(self) -> None:
+        qual = self._sample_zero_survivor_qualification()
+        snap = _sample_authority_snapshot()
+        raw_bytes = build_failure_artifact(
+            failed_stage=FailureStage.METRIC_EVALUATION,
+            error_type="NoCompleteValidDevCandidate",
+            development_exit_status=FailureExitStatus.NEEDS_MODEL_REVISION,
+            protocol_snapshot=snap,
+            candidate_qualification=qual,
+        )
+        parsed = validate_failure_artifact(raw_bytes)
+        assert parsed["error_type"] == "NoCompleteValidDevCandidate"
+        assert len(parsed["candidate_qualification"]) == 5
+
+    def test_zero_survivor_missing_qualification_rejected(self) -> None:
+        with pytest.raises(FailureValidationError, match="candidate_qualification is required"):
+            build_failure_payload(
+                failed_stage=FailureStage.METRIC_EVALUATION,
+                error_type="NoCompleteValidDevCandidate",
+                development_exit_status=FailureExitStatus.NEEDS_MODEL_REVISION,
+                candidate_qualification=None,
+            )
+
+    def test_ordinary_failure_rejects_candidate_qualification(self) -> None:
+        qual = self._sample_zero_survivor_qualification()
+        with pytest.raises(FailureValidationError, match="candidate_qualification is forbidden"):
+            build_failure_payload(
+                failed_stage=FailureStage.MODEL_FIT,
+                error_type="ConstraintViolation",
+                development_exit_status=FailureExitStatus.NEEDS_MODEL_REVISION,
+                candidate_qualification=qual,
+            )
+
+    def test_zero_survivor_qualification_with_complete_valid_rejected(self) -> None:
+        qual = self._sample_zero_survivor_qualification()
+        qual[0]["status"] = "COMPLETE_VALID"
+        with pytest.raises(FailureValidationError, match="must be disqualified"):
+            build_failure_payload(
+                failed_stage=FailureStage.METRIC_EVALUATION,
+                error_type="NoCompleteValidDevCandidate",
+                development_exit_status=FailureExitStatus.NEEDS_MODEL_REVISION,
+                candidate_qualification=qual,
+            )

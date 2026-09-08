@@ -417,12 +417,16 @@ class TestTerminalFailurePreservation:
         assert result.exit_status == FailureExitStatus.NEEDS_MODEL_REVISION
         fail_path = result.output_dir / FAILURE_ARTIFACT_NAME
         fail_data = validate_failure_artifact(fail_path.read_bytes())
-        assert fail_data['failed_stage'] == FailureStage.MODEL_INITIALIZATION.value
-        assert fail_data['error_type'] == 'SVDLeadingSubspaceAmbiguity'
+        assert fail_data['failed_stage'] == FailureStage.METRIC_EVALUATION.value
+        assert fail_data['error_type'] == 'NoCompleteValidDevCandidate'
         assert fail_data['development_exit_status'] == FailureExitStatus.NEEDS_MODEL_REVISION.value
+        assert fail_data['candidate_qualification'] is not None
+        assert len(fail_data['candidate_qualification']) == 5
+        assert all(c['status'] == 'DISQUALIFIED_MODEL_INITIALIZATION' for c in fail_data['candidate_qualification'])
+        assert all(c['error_type'] == 'SVDLeadingSubspaceAmbiguity' for c in fail_data['candidate_qualification'])
         # Post-authority complete snapshot
         assert fail_data['protocol_snapshot'] is not None
-        assert len(fail_data['protocol_snapshot']['authority']) == 72
+        assert len(fail_data['protocol_snapshot']['authority']) == 74
 
     def test_technical_failure_optimizer_execution_error_preserves_triplet(self, repo_root: Path, real_spec_blob: bytes) -> None:
         def failing_fitter(counts: Any, W: int | None = None) -> FittedModelResult:

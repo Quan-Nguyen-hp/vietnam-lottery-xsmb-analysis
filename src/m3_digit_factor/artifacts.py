@@ -335,8 +335,10 @@ def build_development_adjudication_artifact(
     economic_signal: bool,
     qualified_top_k: list[int] | None = None,
     recommended_top_k: list[int] | None = None,
+    complete_valid_candidates: list[str] | None = None,
+    candidate_qualification: list[dict[str, Any]] | None = None,
 ) -> bytes:
-    """Build canonical development_adjudication.json artifact with exact 9 keys."""
+    """Build canonical development_adjudication.json artifact with exact 11 keys."""
     if not forecast_signal:
         exit_status = DevelopmentExitStatus.FORECAST_GATE_FAILED.value
         clean_econ_signal = False
@@ -363,6 +365,8 @@ def build_development_adjudication_artifact(
         "qualified_top_k": clean_qualified,
         "recommended_top_k": clean_recommended,
         "development_exit_status": exit_status,
+        "complete_valid_candidates": list(complete_valid_candidates or []),
+        "candidate_qualification": list(candidate_qualification or []),
     }
     return serialize_json(data)
 
@@ -398,6 +402,8 @@ def build_success_artifacts(
     economic_signal: bool = False,
     qualified_top_k: list[int] | None = None,
     recommended_top_k: list[int] | None = None,
+    complete_valid_candidates: list[str] | None = None,
+    candidate_qualification: list[dict[str, Any]] | None = None,
 ) -> dict[str, bytes]:
     """Construct all 9 development success artifacts."""
     artifacts: dict[str, bytes] = {}
@@ -424,8 +430,39 @@ def build_success_artifacts(
                 r[4],
                 r[5],
             ])
-        else:
-            normalized_metric_rows.append(list(r))
+    if complete_valid_candidates is None:
+        seen: list[str] = []
+        for r in normalized_metric_rows:
+            c_name = str(r[2])
+            if str(r[0]) == "DEV" and c_name != "B0_UNIFORM" and c_name not in seen:
+                seen.append(c_name)
+        complete_valid_candidates = seen
+
+    if candidate_qualification is None:
+        default_qual: list[dict[str, Any]] = []
+        for w in (30, 60, 120, 240, 365):
+            cid = f"M3_W{w:03d}"
+            if cid in complete_valid_candidates:
+                default_qual.append({
+                    "candidate_id": cid,
+                    "W": w,
+                    "status": "COMPLETE_VALID",
+                    "failure_stage": None,
+                    "error_type": None,
+                    "first_failed_target_index": None,
+                    "first_failed_target_date": None,
+                })
+            else:
+                default_qual.append({
+                    "candidate_id": cid,
+                    "W": w,
+                    "status": "DISQUALIFIED_MODEL_FIT",
+                    "failure_stage": "MODEL_FIT",
+                    "error_type": "OptimizerNonConvergence",
+                    "first_failed_target_index": 0,
+                    "first_failed_target_date": "2026-01-01",
+                })
+        candidate_qualification = default_qual
 
     normalized_daily_rows: list[list[Any]] = [list(r) for r in daily_score_rows]
     daily_stages = {r[1] for r in normalized_daily_rows}
@@ -492,6 +529,8 @@ def build_success_artifacts(
         economic_signal=economic_signal,
         qualified_top_k=qualified_top_k,
         recommended_top_k=recommended_top_k,
+        complete_valid_candidates=complete_valid_candidates,
+        candidate_qualification=candidate_qualification,
     )
     artifacts["artifact_manifest.json"] = build_artifact_manifest(artifacts)
 

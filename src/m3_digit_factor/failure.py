@@ -12,7 +12,7 @@ This module implements the exact terminal failure lifecycle for XPIS v3 M3:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 import json
 from pathlib import Path
 from typing import Any
@@ -43,13 +43,24 @@ FAILURE_ARTIFACT_COUNT: int = 1
 FAILURE_ALLOWED_STAGES: tuple[str, ...] = tuple(s.value for s in FailureStage)
 FAILURE_ALLOWED_EXIT_STATUSES: tuple[str, ...] = tuple(s.value for s in FailureExitStatus)
 
-_FAILURE_SCHEMA_KEYS: frozenset[str] = frozenset({
+_ORDINARY_FAILURE_SCHEMA_KEYS: frozenset[str] = frozenset({
     "status",
     "failed_stage",
     "error_type",
     "development_exit_status",
     "protocol_snapshot",
 })
+
+_ZERO_SURVIVOR_FAILURE_SCHEMA_KEYS: frozenset[str] = frozenset({
+    "status",
+    "failed_stage",
+    "error_type",
+    "development_exit_status",
+    "candidate_qualification",
+    "protocol_snapshot",
+})
+
+_FAILURE_SCHEMA_KEYS: frozenset[str] = _ORDINARY_FAILURE_SCHEMA_KEYS
 
 
 class FailureValidationError(ArtifactValidationError):
@@ -127,13 +138,84 @@ def _resolve_protocol_snapshot(
     )
 
 
+def _validate_zero_survivor_qualification(
+    qualification: Any,
+) -> list[dict[str, Any]]:
+    """Validate candidate_qualification for NoCompleteValidDevCandidate."""
+    if not isinstance(qualification, list) or len(qualification) != 5:
+        raise FailureValidationError(
+            f"candidate_qualification must be a list of exactly 5 entries, got {qualification!r}",
+            error_type="INVALID_CANDIDATE_QUALIFICATION",
+        )
+    expected_cands = ["M3_W030", "M3_W060", "M3_W120", "M3_W240", "M3_W365"]
+    expected_windows = [30, 60, 120, 240, 365]
+    expected_keys = {
+        "candidate_id",
+        "W",
+        "status",
+        "failure_stage",
+        "error_type",
+        "first_failed_target_index",
+        "first_failed_target_date",
+    }
+    allowed_disqualified_statuses = {
+        "DISQUALIFIED_MODEL_INITIALIZATION",
+        "DISQUALIFIED_MODEL_FIT",
+        "DISQUALIFIED_FORECAST_CONTRACT",
+    }
+
+    validated: list[dict[str, Any]] = []
+    for idx, (entry, exp_cid, exp_w) in enumerate(
+        zip(qualification, expected_cands, expected_windows, strict=True)
+    ):
+        if not isinstance(entry, dict) or set(entry.keys()) != expected_keys:
+            raise FailureValidationError(
+                f"candidate_qualification entry {idx} keys mismatch: expected {sorted(expected_keys)}, got {entry!r}",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        if entry["candidate_id"] != exp_cid or entry["W"] != exp_w:
+            raise FailureValidationError(
+                f"candidate_qualification entry {idx} identity mismatch: expected ({exp_cid}, {exp_w}), got ({entry.get('candidate_id')}, {entry.get('W')})",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        status = entry["status"]
+        if status not in allowed_disqualified_statuses:
+            raise FailureValidationError(
+                f"Zero-survivor qualification entry {idx} status must be disqualified, got {status!r}",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        if entry["failure_stage"] not in FAILURE_ALLOWED_STAGES:
+            raise FailureValidationError(
+                f"Zero-survivor qualification entry {idx} invalid failure_stage: {entry['failure_stage']!r}",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        if not isinstance(entry["error_type"], str) or not entry["error_type"].strip():
+            raise FailureValidationError(
+                f"Zero-survivor qualification entry {idx} error_type must be a non-empty string",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        if not isinstance(entry["first_failed_target_index"], int) or entry["first_failed_target_index"] < 0:
+            raise FailureValidationError(
+                f"Zero-survivor qualification entry {idx} first_failed_target_index must be non-negative int",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        if not isinstance(entry["first_failed_target_date"], str) or not entry["first_failed_target_date"].strip():
+            raise FailureValidationError(
+                f"Zero-survivor qualification entry {idx} first_failed_target_date must be non-empty string",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        validated.append(dict(entry))
+    return validated
+
+
 def build_failure_payload(
     failed_stage: FailureStage | str,
     error_type: str,
     development_exit_status: FailureExitStatus | str,
     protocol_snapshot: AuthoritySnapshot | Mapping[str, Any] | None = None,
+    candidate_qualification: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Construct the exact 5-key terminal failure payload dictionary."""
+    """Construct terminal failure payload dictionary (5-key ordinary or 6-key zero-survivor)."""
     if isinstance(failed_stage, FailureStage):
         stage_str = failed_stage.value
     elif isinstance(failed_stage, str) and failed_stage in FAILURE_ALLOWED_STAGES:
@@ -163,6 +245,28 @@ def build_failure_payload(
 
     resolved_snapshot = _resolve_protocol_snapshot(protocol_snapshot)
 
+    if error_type_str == "NoCompleteValidDevCandidate":
+        if candidate_qualification is None:
+            raise FailureValidationError(
+                "candidate_qualification is required for NoCompleteValidDevCandidate",
+                error_type="MISSING_CANDIDATE_QUALIFICATION",
+            )
+        validated_qual = _validate_zero_survivor_qualification(list(candidate_qualification))
+        return {
+            "candidate_qualification": validated_qual,
+            "development_exit_status": status_str,
+            "error_type": error_type_str,
+            "failed_stage": stage_str,
+            "protocol_snapshot": resolved_snapshot,
+            "status": "FAILED",
+        }
+
+    if candidate_qualification is not None:
+        raise FailureValidationError(
+            f"candidate_qualification is forbidden for error_type {error_type_str!r}",
+            error_type="FORBIDDEN_CANDIDATE_QUALIFICATION",
+        )
+
     return {
         "development_exit_status": status_str,
         "error_type": error_type_str,
@@ -177,6 +281,7 @@ def build_failure_artifact(
     error_type: str,
     development_exit_status: FailureExitStatus | str,
     protocol_snapshot: AuthoritySnapshot | Mapping[str, Any] | None = None,
+    candidate_qualification: Sequence[Mapping[str, Any]] | None = None,
 ) -> bytes:
     """Build canonical byte-exact serialized bytes for development_run_FAILED.json."""
     payload = build_failure_payload(
@@ -184,6 +289,7 @@ def build_failure_artifact(
         error_type=error_type,
         development_exit_status=development_exit_status,
         protocol_snapshot=protocol_snapshot,
+        candidate_qualification=candidate_qualification,
     )
     return serialize_json(payload)
 
@@ -193,6 +299,7 @@ def build_failure_artifact_set(
     error_type: str,
     development_exit_status: FailureExitStatus | str,
     protocol_snapshot: AuthoritySnapshot | Mapping[str, Any] | None = None,
+    candidate_qualification: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, bytes]:
     """Build the single-artifact failure set mapping."""
     return {
@@ -201,6 +308,7 @@ def build_failure_artifact_set(
             error_type=error_type,
             development_exit_status=development_exit_status,
             protocol_snapshot=protocol_snapshot,
+            candidate_qualification=candidate_qualification,
         )
     }
 
@@ -223,7 +331,8 @@ def build_failure_artifact_from_exception(
     protocol_snapshot: AuthoritySnapshot | Mapping[str, Any] | None = None,
 ) -> bytes:
     """Build failure artifact bytes from an M3 pipeline exception."""
-    if hasattr(exc, "as_protocol_failure") and callable(exc.as_protocol_failure):
+    candidate_qual = getattr(exc, "candidate_qualification", None)
+    if hasattr(exc, "as_protocol_failure") and callable(exc.as_protocol_failure) and candidate_qual is None:
         pf: ProtocolFailure = exc.as_protocol_failure()
         return build_failure_artifact_from_failure(pf, protocol_snapshot=protocol_snapshot)
 
@@ -247,6 +356,9 @@ def build_failure_artifact_from_exception(
         }:
             stage = stage or FailureStage.MODEL_FIT
             exit_status = exit_status or FailureExitStatus.NEEDS_MODEL_REVISION
+        elif error_type == "NoCompleteValidDevCandidate":
+            stage = stage or FailureStage.METRIC_EVALUATION
+            exit_status = exit_status or FailureExitStatus.NEEDS_MODEL_REVISION
         elif error_type == "OptimizerExecutionError":
             stage = stage or FailureStage.MODEL_FIT
             exit_status = exit_status or FailureExitStatus.TECHNICAL_FAILURE
@@ -268,6 +380,7 @@ def build_failure_artifact_from_exception(
         error_type=error_type,
         development_exit_status=exit_status,
         protocol_snapshot=protocol_snapshot,
+        candidate_qualification=candidate_qual,
     )
 
 
@@ -300,11 +413,19 @@ def validate_failure_artifact(raw_bytes: bytes) -> dict[str, Any]:
         )
 
     keys = set(parsed.keys())
-    if keys != _FAILURE_SCHEMA_KEYS:
-        raise FailureValidationError(
-            f"Exact 5 top-level keys required, got {sorted(keys)}",
-            error_type="FAILURE_SCHEMA_ERROR",
-        )
+    if parsed.get("error_type") == "NoCompleteValidDevCandidate":
+        if keys != _ZERO_SURVIVOR_FAILURE_SCHEMA_KEYS:
+            raise FailureValidationError(
+                f"Exact 6 top-level keys required for NoCompleteValidDevCandidate, got {sorted(keys)}",
+                error_type="FAILURE_SCHEMA_ERROR",
+            )
+        _validate_zero_survivor_qualification(parsed["candidate_qualification"])
+    else:
+        if keys != _ORDINARY_FAILURE_SCHEMA_KEYS:
+            raise FailureValidationError(
+                f"Exact 5 top-level keys required, got {sorted(keys)}",
+                error_type="FAILURE_SCHEMA_ERROR",
+            )
 
     if parsed["status"] != "FAILED":
         raise FailureValidationError(

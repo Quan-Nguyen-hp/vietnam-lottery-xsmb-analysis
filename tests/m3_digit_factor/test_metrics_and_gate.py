@@ -38,6 +38,7 @@ from src.m3_digit_factor.metrics import (
     evaluate_forecast_gate,
     evaluate_val_primary,
     evaluate_val_secondary,
+    NoCompleteValidDevCandidate,
     select_dev_winner,
     validate_forecast_inputs,
     window_for_candidate_id,
@@ -456,14 +457,29 @@ def test_dev_winner_selection_ignores_val_data() -> None:
     assert winner.window == 60
 
 
-def test_dev_winner_selection_requires_all_five_m3_windows() -> None:
-    """Incomplete candidate universe raises MetricEvaluationError."""
-    m_dev = {
+def test_dev_winner_selection_subset_support_and_zero_survivors() -> None:
+    """Non-empty subsets are supported; empty candidate universe raises NoCompleteValidDevCandidate."""
+    m_dev_subset = {
         30: StageForecastMetrics(poisson_deviance=0.72, mae=0.35, rmse=0.45, date_count=100),
         60: StageForecastMetrics(poisson_deviance=0.70, mae=0.40, rmse=0.50, date_count=100),
     }
-    with pytest.raises(MetricEvaluationError, match="Candidate universe must contain exactly"):
-        select_dev_winner(m_dev)
+    winner = select_dev_winner(m_dev_subset)
+    assert winner.window == 60
+
+    m_dev_single = {
+        120: StageForecastMetrics(poisson_deviance=0.75, mae=0.30, rmse=0.40, date_count=100),
+    }
+    winner_single = select_dev_winner(m_dev_single)
+    assert winner_single.window == 120
+
+    with pytest.raises(NoCompleteValidDevCandidate):
+        select_dev_winner({})
+
+    with pytest.raises(NoCompleteValidDevCandidate):
+        select_dev_winner([])
+
+    with pytest.raises(MetricEvaluationError, match="unknown windows"):
+        select_dev_winner({999: StageForecastMetrics(poisson_deviance=0.70, mae=0.30, rmse=0.40, date_count=100)})
 
 
 # --- 6. VAL Comparisons and Forecast Gate Tests ---

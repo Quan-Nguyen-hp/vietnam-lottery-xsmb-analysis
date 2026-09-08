@@ -8,6 +8,7 @@ import pytest
 from src.m3_digit_factor.contracts import (
     ArtifactStatus,
     CandidateID,
+    CandidateStatus,
     DevelopmentExitStatus,
     DevelopmentStage,
     FailureExitStatus,
@@ -56,6 +57,12 @@ def test_closed_contract_values_match_the_frozen_protocol():
         'M3_W240',
         'M3_W365',
     }
+    assert {status.value for status in CandidateStatus} == {
+        'COMPLETE_VALID',
+        'DISQUALIFIED_MODEL_INITIALIZATION',
+        'DISQUALIFIED_MODEL_FIT',
+        'DISQUALIFIED_FORECAST_CONTRACT',
+    }
     assert {model.value for model in ModelID} == {'B0', 'M3'}
     assert {stage.value for stage in DevelopmentStage} == {'DEV', 'VAL', 'STABILITY'}
     assert {status.value for status in ArtifactStatus} == {
@@ -71,6 +78,7 @@ def test_closed_contract_values_match_the_frozen_protocol():
     FailureExitStatus,
     DevelopmentExitStatus,
     CandidateID,
+    CandidateStatus,
     ModelID,
     DevelopmentStage,
     ArtifactStatus,

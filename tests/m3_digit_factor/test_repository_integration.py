@@ -162,7 +162,7 @@ def test_legacy_scientific_isolation_audit() -> None:
 
 def test_historical_authorization_flag_preserves_protocol_fingerprint() -> None:
     """Authorizing a historical run (--authorize-historical-run) preserves authority keys and protocol fingerprint."""
-    assert len(AUTHORITY_KEYS) == 72
+    assert len(AUTHORITY_KEYS) == 74
     assert 'authorize_historical_run' not in AUTHORITY_KEYS
 
     # Build authority snapshot using current repository HEAD

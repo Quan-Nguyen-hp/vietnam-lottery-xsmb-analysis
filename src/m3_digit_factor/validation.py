@@ -677,6 +677,8 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
         "qualified_top_k",
         "recommended_top_k",
         "development_exit_status",
+        "complete_valid_candidates",
+        "candidate_qualification",
     }
     if set(adjudication.keys()) != expected_adj_keys:
         raise ArtifactValidationError(
@@ -699,6 +701,103 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
         raise ArtifactValidationError(
             f"candidate/window mismatch: candidate {selected_candidate} declares window {adjudication['selected_window_days']}, expected {expected_selected_window}",
             error_type="CANDIDATE_WINDOW_MISMATCH",
+        )
+
+    complete_valid_candidates = adjudication.get("complete_valid_candidates")
+    if not isinstance(complete_valid_candidates, list) or len(complete_valid_candidates) == 0:
+        raise ArtifactValidationError(
+            f"complete_valid_candidates must be a non-empty list, got {complete_valid_candidates!r}",
+            error_type="INVALID_COMPLETE_VALID_CANDIDATES",
+        )
+    if selected_candidate not in complete_valid_candidates:
+        raise ArtifactValidationError(
+            f"selected_candidate_id {selected_candidate} is not in complete_valid_candidates {complete_valid_candidates}",
+            error_type="SELECTED_CANDIDATE_NOT_IN_SURVIVORS",
+        )
+
+    candidate_qualification = adjudication.get("candidate_qualification")
+    if not isinstance(candidate_qualification, list) or len(candidate_qualification) != 5:
+        raise ArtifactValidationError(
+            f"candidate_qualification must be a list of exactly 5 entries, got {candidate_qualification!r}",
+            error_type="INVALID_CANDIDATE_QUALIFICATION",
+        )
+
+    expected_qual_cands = ["M3_W030", "M3_W060", "M3_W120", "M3_W240", "M3_W365"]
+    expected_qual_windows = [30, 60, 120, 240, 365]
+    expected_qual_keys = {
+        "candidate_id",
+        "W",
+        "status",
+        "failure_stage",
+        "error_type",
+        "first_failed_target_index",
+        "first_failed_target_date",
+    }
+    allowed_statuses = {
+        "COMPLETE_VALID",
+        "DISQUALIFIED_MODEL_INITIALIZATION",
+        "DISQUALIFIED_MODEL_FIT",
+        "DISQUALIFIED_FORECAST_CONTRACT",
+    }
+
+    derived_complete_valid: list[str] = []
+    for idx, (entry, exp_cid, exp_w) in enumerate(
+        zip(candidate_qualification, expected_qual_cands, expected_qual_windows, strict=True)
+    ):
+        if not isinstance(entry, dict) or set(entry.keys()) != expected_qual_keys:
+            raise ArtifactValidationError(
+                f"candidate_qualification entry {idx} keys mismatch: expected {sorted(expected_qual_keys)}, got {entry!r}",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        if entry["candidate_id"] != exp_cid or entry["W"] != exp_w:
+            raise ArtifactValidationError(
+                f"candidate_qualification entry {idx} identity mismatch: expected ({exp_cid}, {exp_w}), got ({entry.get('candidate_id')}, {entry.get('W')})",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        status = entry["status"]
+        if status not in allowed_statuses:
+            raise ArtifactValidationError(
+                f"candidate_qualification entry {idx} status invalid: {status!r}",
+                error_type="INVALID_CANDIDATE_QUALIFICATION",
+            )
+        if status == "COMPLETE_VALID":
+            derived_complete_valid.append(exp_cid)
+            if (
+                entry["failure_stage"] is not None
+                or entry["error_type"] is not None
+                or entry["first_failed_target_index"] is not None
+                or entry["first_failed_target_date"] is not None
+            ):
+                raise ArtifactValidationError(
+                    f"COMPLETE_VALID qualification entry {idx} must have null failure fields, got {entry!r}",
+                    error_type="INVALID_CANDIDATE_QUALIFICATION",
+                )
+        else:
+            if (
+                entry["failure_stage"] is None
+                or entry["error_type"] is None
+                or entry["first_failed_target_index"] is None
+                or entry["first_failed_target_date"] is None
+            ):
+                raise ArtifactValidationError(
+                    f"Disqualified qualification entry {idx} must have non-null failure fields, got {entry!r}",
+                    error_type="INVALID_CANDIDATE_QUALIFICATION",
+                )
+            if not isinstance(entry["first_failed_target_index"], int) or entry["first_failed_target_index"] < 0:
+                raise ArtifactValidationError(
+                    f"Disqualified qualification entry {idx} first_failed_target_index must be non-negative int",
+                    error_type="INVALID_CANDIDATE_QUALIFICATION",
+                )
+            if not isinstance(entry["first_failed_target_date"], str) or not entry["first_failed_target_date"].strip():
+                raise ArtifactValidationError(
+                    f"Disqualified qualification entry {idx} first_failed_target_date must be non-empty str",
+                    error_type="INVALID_CANDIDATE_QUALIFICATION",
+                )
+
+    if derived_complete_valid != complete_valid_candidates:
+        raise ArtifactValidationError(
+            f"Derived complete valid candidates {derived_complete_valid} does not match adjudication complete_valid_candidates {complete_valid_candidates}",
+            error_type="COMPLETE_VALID_DERIVATION_MISMATCH",
         )
 
     # 6. forecast_metrics.csv
@@ -816,9 +915,10 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
 
     # --- Exact Row Universes in forecast_metrics.csv ---
     dev_metric_cands = [r[2] for r in metric_rows if r[0] == "DEV"]
-    if dev_metric_cands != DEV_REQUIRED_CANDIDATES:
+    expected_dev_metric_cands = ["B0_UNIFORM"] + complete_valid_candidates
+    if dev_metric_cands != expected_dev_metric_cands:
         raise ArtifactValidationError(
-            f"DEV candidate row universe mismatch in forecast_metrics.csv: expected {DEV_REQUIRED_CANDIDATES}, got {dev_metric_cands}",
+            f"DEV candidate row universe mismatch in forecast_metrics.csv: expected {expected_dev_metric_cands}, got {dev_metric_cands}",
             error_type="ROW_UNIVERSE_MISMATCH",
         )
 
@@ -845,7 +945,7 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
             error_type="ROW_UNIVERSE_MISMATCH",
         )
 
-    expected_metric_row_count = len(DEV_REQUIRED_CANDIDATES) + len(expected_val_cands) + (len(expected_val_cands) if fc_signal else 0)
+    expected_metric_row_count = len(expected_dev_metric_cands) + len(expected_val_cands) + (len(expected_val_cands) if fc_signal else 0)
     if len(metric_rows) != expected_metric_row_count:
         raise ArtifactValidationError(
             f"forecast_metrics.csv row count mismatch: expected {expected_metric_row_count}, got {len(metric_rows)}",
@@ -862,14 +962,21 @@ def validate_success_artifacts(artifacts: Mapping[str, bytes] | str | Path) -> N
     if not val_daily_dates:
         raise ArtifactValidationError("No VAL dates represented in daily scores", error_type="MISSING_VAL_DATES")
 
-    # Verify every DEV date has all 6 DEV candidates
+    # Verify every DEV date has B0 and complete_valid_candidates
     for d in dev_daily_dates:
         cands = [r[3] for r in daily_score_rows if r[1] == "DEV" and r[0] == d]
-        if cands != DEV_REQUIRED_CANDIDATES:
+        if cands != expected_dev_metric_cands:
             raise ArtifactValidationError(
-                f"DEV daily scores date {d} candidate coverage mismatch: expected {DEV_REQUIRED_CANDIDATES}, got {cands}",
+                f"DEV daily scores date {d} candidate coverage mismatch: expected {expected_dev_metric_cands}, got {cands}",
                 error_type="ROW_UNIVERSE_MISMATCH",
             )
+
+    dev_m3_score_cands = sorted({r[3] for r in daily_score_rows if r[1] == "DEV" and r[2] == "M3"})
+    if dev_m3_score_cands != sorted(complete_valid_candidates):
+        raise ArtifactValidationError(
+            f"DEV daily scores M3 candidates mismatch: expected {sorted(complete_valid_candidates)}, got {dev_m3_score_cands}",
+            error_type="ROW_UNIVERSE_MISMATCH",
+        )
 
     # Verify every VAL date has exactly B0 and selected_candidate
     for d in val_daily_dates:
