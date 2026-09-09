@@ -1,0 +1,93 @@
+{
+  "source_commit": "27a45d3553fe448b016788305a1774054d6c1123",
+  "source_tree": "e1f5b325688de13635fd5cb8f7d2ba6c12c581f1",
+  "data_blob": "8474b4e7c10802c683080779bead75d7e56cf358",
+  "data_sha256": "3ae8970bfb2d54d9ad72d18aad1a1e3022c6231bc349dcfd01a78bc20e6a75c7",
+  "environment_versions": {
+    "python": "3.14.7 (main, Aug 25 2026, 14:01:25) [MSC v.1944 64 bit (AMD64)]",
+    "numpy": "2.4.1",
+    "scipy": "1.18.0"
+  },
+  "candidate_universe": [
+    "B0_UNIFORM",
+    "M3_W060",
+    "M3_W120",
+    "M3_W240",
+    "M3_W365"
+  ],
+  "w30_replayed": false,
+  "survivor_evidence_replay_count": 1,
+  "dev_target_count": 3588,
+  "row_counts": {
+    "B0_UNIFORM": 3588,
+    "M3_W060": 3588,
+    "M3_W120": 3588,
+    "M3_W240": 3588,
+    "M3_W365": 3588,
+    "total": 17940
+  },
+  "recomputed_stage_metrics": {
+    "B0_UNIFORM": {
+      "poisson_deviance": 0.796938949175599,
+      "mae": 0.4111946488294315,
+      "rmse": 0.5149749698975269
+    },
+    "M3_W060": {
+      "poisson_deviance": 0.8042333405036054,
+      "mae": 0.4110093767462459,
+      "rmse": 0.5168130642739809
+    },
+    "M3_W120": {
+      "poisson_deviance": 0.8001872562294541,
+      "mae": 0.4110067121599063,
+      "rmse": 0.5158171662698295
+    },
+    "M3_W240": {
+      "poisson_deviance": 0.7988028500490358,
+      "mae": 0.4111464471828223,
+      "rmse": 0.515458156103333
+    },
+    "M3_W365": {
+      "poisson_deviance": 0.7980882943451931,
+      "mae": 0.4111392092538061,
+      "rmse": 0.5152723612232397
+    }
+  },
+  "sorted_dev_comparison": [
+    {
+      "candidate_id": "M3_W365",
+      "window_days": 365,
+      "poisson_deviance": 0.7980882943451931,
+      "mae": 0.4111392092538061,
+      "rmse": 0.5152723612232397
+    },
+    {
+      "candidate_id": "M3_W240",
+      "window_days": 240,
+      "poisson_deviance": 0.7988028500490358,
+      "mae": 0.4111464471828223,
+      "rmse": 0.515458156103333
+    },
+    {
+      "candidate_id": "M3_W120",
+      "window_days": 120,
+      "poisson_deviance": 0.8001872562294541,
+      "mae": 0.4110067121599063,
+      "rmse": 0.5158171662698295
+    },
+    {
+      "candidate_id": "M3_W060",
+      "window_days": 60,
+      "poisson_deviance": 0.8042333405036054,
+      "mae": 0.4110093767462459,
+      "rmse": 0.5168130642739809
+    }
+  ],
+  "winner": {
+    "candidate_id": "M3_W365",
+    "window_days": 365
+  },
+  "daily_scores_sha256": "701db285821365a083725b0fef60ff2dc66df6d69ba580d67a6c6fe3d7df03b7",
+  "daily_scores_file_size": 1616703,
+  "daily_scores_row_count": 17940
+}
