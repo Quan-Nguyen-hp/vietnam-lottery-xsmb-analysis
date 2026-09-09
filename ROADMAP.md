@@ -178,7 +178,11 @@ Kết quả exploratory 365 ngày đã sửa rò rỉ: PnL XPIS `-135.000đ`, Pn
 - [x] Web dashboard dùng cache-busting và fallback an toàn khi artifact holdout chưa được deploy.
 - [x] Khi `SKIP`, web dashboard ẩn hoàn toàn các ứng viên xác suất thô để tránh bị hiểu nhầm thành khuyến nghị.
 - [x] Khi có số được chọn, khối xác suất chỉ hiển thị đúng các số trong `bets`, kèm cảnh báo paper-trade.
-- [ ] Cập nhật GitHub Pages artifact để chứa `backtests/results/locked_holdout_status.json` và `predictions/evaluation_policy.json`.
+- [x] Cập nhật GitHub Pages artifact để chứa `backtests/results/locked_holdout_status.json` và `predictions/evaluation_policy.json` (xác nhận 2026-09-09):
+  - GitHub Pages uses legacy branch deployment from main:/.
+  - Both required JSON paths are already publicly served.
+  - Public HTTP bytes were verified against the corresponding git blobs on main and matched exactly.
+  - No separate Pages packaging/deployment change was required.
 - [ ] Chờ dữ liệu từ `2026-07-21` đủ tối thiểu 180 ngày rồi mới chạy locked holdout exact-mode.
 
 ## 13. Top-K ablation: chỉ chọn một số
