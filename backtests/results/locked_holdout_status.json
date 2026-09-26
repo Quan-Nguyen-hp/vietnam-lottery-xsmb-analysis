@@ -1,9 +1,9 @@
 {
   "start_date": "2026-07-21",
   "minimum_days": 180,
-  "available_days": 67,
+  "available_days": 68,
   "available_start": "2026-07-21",
-  "available_end": "2026-09-25",
+  "available_end": "2026-09-26",
   "ready": false,
   "pre_holdout_log_entries": [
     0,
@@ -15,7 +15,7 @@
     6,
     7
   ],
-  "holdout_log_entries": 66,
-  "completed_holdout_log_entries": 60,
+  "holdout_log_entries": 67,
+  "completed_holdout_log_entries": 61,
   "policy_mode": "paper_trade"
 }
