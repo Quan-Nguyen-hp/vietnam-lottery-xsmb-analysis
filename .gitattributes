@@ -1,0 +1,3 @@
+# Frozen challenger artifacts: never normalise line endings.
+# prereg_r2/power_audit.json is pinned by SHA-256 of its raw bytes (stored as CRLF), so any EOL conversion would break verification.
+backtests/results/frozen_challenger_v1/** -text

@@ -1,0 +1,116 @@
+{
+  "data": {
+    "csv": "data/xsmb-2-digits.csv",
+    "prefix_cutoff_exclusive": "2026-07-21",
+    "prefix_last_date": "2026-07-20",
+    "prefix_rows": 7497,
+    "prefix_sha256": "c31e4ed799f113912f42fe894f14b124574dc05545623658edcbdf3ab0544bcd"
+  },
+  "discovery_stats_in_sample_not_evidence": {
+    "corr_ic_excess": 0.23501945764350288,
+    "ic_mean": 0.00532763518878781,
+    "kappa_excess_per_ic": 0.88219969050688,
+    "periods": {
+      "DEV 2007-2015": {
+        "ic_mean": 0.006370084785235799,
+        "n": 3254,
+        "top2_excess_mean": 0.007043638598647801
+      },
+      "FINAL 2021-pre-holdout": {
+        "ic_mean": 0.00714244701687733,
+        "n": 2003,
+        "top2_excess_mean": 0.006335496754867682
+      },
+      "VAL 2016-2020": {
+        "ic_mean": 0.0013336961146473243,
+        "n": 1785,
+        "top2_excess_mean": 0.0064705882352941
+      }
+    },
+    "sd_ic_daily": 0.09990900745167233,
+    "sd_top2_excess_daily": 0.37503148180357304,
+    "top2_excess_mean": 0.006595744680851046,
+    "window": "draws 400..7496 of the pre-holdout prefix"
+  },
+  "forbidden": [
+    "reading or scoring holdout outcomes before N_target valid draws exist",
+    "changing rule, window, K, tie-break, metric, MWU or gate after freeze (new version required)",
+    "selecting among variants using holdout data",
+    "editing predictions/evaluation_policy.json or prediction_log.json from this module"
+  ],
+  "frozen_on": "2026-11-01",
+  "gate": {
+    "G1": "one-sided 97.5% block-bootstrap lower bound of mean IC > 0",
+    "G2": "mean IC >= ic_floor (break-even IC = break_even_excess / kappa)",
+    "G3": "mean top-2 excess > 0",
+    "after_fail": "ABANDON challenger; no retuning on the holdout; a new rule needs a new version and new data",
+    "after_pass": "only then consider a separate paper-trade comparison against the production policy; production unchanged by this spec",
+    "evaluation_window": "first N_target valid draws with date >= holdout start; single look; no interim scoring",
+    "holdout_start": "2026-07-21",
+    "ic_floor": 0.003091446025905651
+  },
+  "id": "XSMB-FROZEN-CHALLENGER-V1",
+  "minimum_worthwhile_uplift": {
+    "ic_equiv": 0.005667651047493772,
+    "rationale": "about 1.8x break-even excess; smaller uplift is not worth any production/paper-trade change",
+    "roi_flat_equiv": 0.008333333333333304,
+    "top2_excess_hits_per_pick": 0.005
+  },
+  "primary_metric": {
+    "aggregation": "mean over evaluated draws; one-sided 97.5% lower bound by circular block bootstrap",
+    "bootstrap": {
+      "block": 7,
+      "resamples": 10000,
+      "seed": 42
+    },
+    "name": "mean daily Spearman IC between score and per-number draw count (100 numbers/day)",
+    "why": "full-ranking accuracy; highest statistical power for one draw/day"
+  },
+  "rule": {
+    "H": "sum of f over the 10 numbers sharing the same tens digit (head)",
+    "L": "sum of f over the 10 numbers sharing the same units digit (tail)",
+    "f": "count of number n over the 90 valid draws immediately before target date T (rows with date < T)",
+    "formula": "score[n] = z(H[n//10]) + z(L[n%10]) + z(f[n]); picks = top-2 by score",
+    "free_parameters_tuned_after_freeze": 0,
+    "invalid_rows": "rows without exactly 27 values in 0..99 are ignored entirely (not history, not evaluated)",
+    "min_history_draws": 90,
+    "score_rounding_decimals": 12,
+    "tie_break": "lower number first",
+    "top_k": 2,
+    "window_draws": 90,
+    "z": "per-day cross-sectional standardisation over 100 numbers, population sd; sd==0 -> zeros"
+  },
+  "sample_size": {
+    "alpha_one_sided": 0.025,
+    "approx_years_at_one_draw_per_day": 7.011635865845311,
+    "delta_ic": 0.005667651047493772,
+    "earliest_possible_score_date_approx": "2033-07-25",
+    "invalid_inflation": 1.05,
+    "joint_power_all_gates": 0.63515,
+    "mde_ic_by_n": {
+      "1460": 0.007325411971944367,
+      "180": 0.020862782441428848,
+      "2561": 0.00553100043398534,
+      "365": 0.014650823943888735,
+      "730": 0.010359696960693962
+    },
+    "mde_top2_excess_by_n": {
+      "1460": 0.027497621853453266,
+      "180": 0.07831326136774329,
+      "2561": 0.020761884654064863,
+      "365": 0.05499524370690653,
+      "730": 0.03888750975816041
+    },
+    "n_required_raw": 2438.9941410577026,
+    "n_target_valid_draws": 2561,
+    "power": 0.8,
+    "sigma_ic": 0.09990900745167233
+  },
+  "secondary_metric": {
+    "break_even_excess": 0.0027272727272726893,
+    "name": "top-2 excess hits per pick = mean count of 2 picks - mean count over 100 numbers (same day)",
+    "note": "reported with CI; underpowered by design; used only for direction (G3) and for the paper-trade stage"
+  },
+  "status": "FROZEN_PROSPECTIVE_NOT_PRODUCTION",
+  "version": "frozen-challenger-v1.0.0"
+}

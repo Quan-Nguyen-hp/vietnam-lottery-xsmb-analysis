@@ -861,6 +861,9 @@ linting = [
     { name = "isort" },
     { name = "ruff" },
 ]
+research = [
+    { name = "scipy" },
+]
 testing = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -890,6 +893,7 @@ linting = [
     { name = "isort" },
     { name = "ruff" },
 ]
+research = [{ name = "scipy", specifier = ">=1.14" }]
 testing = [
     { name = "pytest" },
     { name = "pytest-asyncio" },

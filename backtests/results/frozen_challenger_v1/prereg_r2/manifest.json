@@ -1,0 +1,18 @@
+{
+  "code_sha256_r2": "01c8c1bcf889c9007986f385aeb65fea5b2693866c2b464dbe6fc6c36dfcec66",
+  "data_prefix_sha256": "c31e4ed799f113912f42fe894f14b124574dc05545623658edcbdf3ab0544bcd",
+  "frozen_on": "2026-11-01",
+  "power_audit_sha256": "c9e7f10829e00698fb027c4d2f19a894e45db3b00bf85ae451b6da1a1f16492c",
+  "revision": "frozen-challenger-v1-prereg-r2",
+  "rule_fingerprint_prefix_picks_sha256": "43b1b9162a4534b83701816e483ba8a88d158596b04d73a8e4d40415120cd5ad",
+  "spec_sha256": "94080dbcd7195d35a3184faa1f029a08dde69edca395d38dc91033da514e6067",
+  "v1_code_sha256": "3b869f4edacca8b39531675b805e0912fe010c930e696f9799879513a65e0a65",
+  "v1_manifest": {
+    "code_sha256": "3b869f4edacca8b39531675b805e0912fe010c930e696f9799879513a65e0a65",
+    "data_prefix_sha256": "c31e4ed799f113912f42fe894f14b124574dc05545623658edcbdf3ab0544bcd",
+    "frozen_on": "2026-11-01",
+    "spec_sha256": "5388d4481b5234b55657ba3152fe00f73416f22ad04eda21e05fe45593aa51c5",
+    "version": "frozen-challenger-v1.0.0"
+  },
+  "v1_spec_sha256": "5388d4481b5234b55657ba3152fe00f73416f22ad04eda21e05fe45593aa51c5"
+}

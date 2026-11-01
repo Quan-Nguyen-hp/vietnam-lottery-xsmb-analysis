@@ -1,0 +1,127 @@
+{
+  "confirmatory_protocol": {
+    "E_economic_qualification": "S passed AND one-sided 97.5% block-bootstrap lower bound of mean top-2 excess > break_even_excess (0.002727); NOT merely > 0",
+    "E_informational_only": [
+      "ROI flat equivalent of mean and of lower bound",
+      "excess minus break-even"
+    ],
+    "S_scientific_confirmation": "one-sided 97.5% block-bootstrap lower bound of mean IC > 0 (block 7, 10000, seed 42)",
+    "evaluation_window": "N_target draw hợp lệ đầu tiên có ngày >= holdout start; một lần nhìn; không chấm giữa chừng",
+    "holdout_start": "2026-07-21",
+    "not_qualified_means_not_disproved": true,
+    "one_shot": "score-holdout writes holdout_result.json with mode x; shared with v1 so only one revision can ever score",
+    "outcomes": {
+      "NOT_CONFIRMED": "abandon; no retuning on holdout",
+      "SCIENTIFIC_CONFIRMED_ECONOMIC_QUALIFIED": "Control Plane may consider a separate paper-trade comparison; production unchanged by this spec",
+      "SCIENTIFIC_CONFIRMED_NOT_ECONOMICALLY_QUALIFIED": "retain evidence; no production/paper-trade change; this is the expected outcome if the effect is real but small"
+    }
+  },
+  "data": {
+    "csv": "data/xsmb-2-digits.csv",
+    "prefix_cutoff_exclusive": "2026-07-21",
+    "prefix_last_date": "2026-07-20",
+    "prefix_rows": 7497,
+    "prefix_sha256": "c31e4ed799f113912f42fe894f14b124574dc05545623658edcbdf3ab0544bcd"
+  },
+  "forbidden": [
+    "reading or scoring holdout outcomes before N_target valid draws exist",
+    "changing rule, window, K, tie-break, metric, MWU or gate after freeze (new version required)",
+    "selecting among variants using holdout data",
+    "editing predictions/evaluation_policy.json or prediction_log.json from this module",
+    "using S alone as evidence of profitability"
+  ],
+  "frozen_on": "2026-11-01",
+  "holdout_usage_rules": {
+    "allowed": "outcomes of draws strictly before target date T (date < T) as history for the forecast of T",
+    "enforcement": [
+      "forecast_from_lines filters rows by date < T before parsing",
+      "scores_all row t uses c[max(0,t-90):t] only (poison test)",
+      "validity of a future row never changes the score of T (window = 90 valid rows before T)",
+      "row validity is judged only from format (27 values in 0..99), never from outcome"
+    ],
+    "forbidden": [
+      "outcome of T",
+      "any later date",
+      "scoring or peeking before N_target valid draws exist"
+    ]
+  },
+  "id": "XSMB-FROZEN-CHALLENGER-V1",
+  "limitations": [
+    "discovery IC/excess are in-sample and selected after seeing all 3 periods (winner curse): true power below nominal",
+    "rule IC in VAL 2016-2020 was only 0.0013 vs 0.0064/0.0071 elsewhere: effect not uniform over time",
+    "one lottery, one draw/day: E needs hundreds of years at plausible effects; E can only pass for a very large effect",
+    "scipy is used but not declared directly in pyproject.toml (transitive via scikit-learn)"
+  ],
+  "metrics": {
+    "minimum_worthwhile_uplift": {
+      "ic_equiv": 0.005667651047493772,
+      "rationale": "about 1.8x break-even excess; smaller uplift is not worth any production/paper-trade change",
+      "roi_flat_equiv": 0.008333333333333304,
+      "top2_excess_hits_per_pick": 0.005
+    },
+    "primary": {
+      "aggregation": "mean over evaluated draws; one-sided 97.5% lower bound by circular block bootstrap",
+      "bootstrap": {
+        "block": 7,
+        "resamples": 10000,
+        "seed": 42
+      },
+      "name": "mean daily Spearman IC between score and per-number draw count (100 numbers/day)",
+      "why": "full-ranking accuracy; highest statistical power for one draw/day"
+    },
+    "secondary": {
+      "break_even_excess": 0.0027272727272726893,
+      "name": "top-2 excess hits per pick = mean count of 2 picks - mean count over 100 numbers (same day)",
+      "note": "reported with CI; underpowered by design; used only for direction (G3) and for the paper-trade stage"
+    }
+  },
+  "prediction_rule": {
+    "rule": {
+      "H": "sum of f over the 10 numbers sharing the same tens digit (head)",
+      "L": "sum of f over the 10 numbers sharing the same units digit (tail)",
+      "f": "count of number n over the 90 valid draws immediately before target date T (rows with date < T)",
+      "formula": "score[n] = z(H[n//10]) + z(L[n%10]) + z(f[n]); picks = top-2 by score",
+      "free_parameters_tuned_after_freeze": 0,
+      "invalid_rows": "rows without exactly 27 values in 0..99 are ignored entirely (not history, not evaluated)",
+      "min_history_draws": 90,
+      "score_rounding_decimals": 12,
+      "tie_break": "lower number first",
+      "top_k": 2,
+      "window_draws": 90,
+      "z": "per-day cross-sectional standardisation over 100 numbers, population sd; sd==0 -> zeros"
+    },
+    "unchanged": true,
+    "v1_code_sha256": "3b869f4edacca8b39531675b805e0912fe010c930e696f9799879513a65e0a65",
+    "v1_spec_sha256": "5388d4481b5234b55657ba3152fe00f73416f22ad04eda21e05fe45593aa51c5"
+  },
+  "revision": "frozen-challenger-v1-prereg-r2",
+  "sample_size": {
+    "alpha_one_sided": 0.025,
+    "approx_years": 7.011635865845311,
+    "earliest_possible_score_date_approx": "2033-07-25",
+    "min_true_excess_for_E_80pct_at_n_target": 0.023489157381337552,
+    "n_needed_for_E_80pct_at_MWU_draws": 213721.63074210947,
+    "n_target_valid_draws": 2561,
+    "nominal_power_target": 0.8,
+    "note": "Power 80% chỉ áp dụng cho S (khoảng 82% tại N_target, nếu IC thật = IC của MWU). E gần như không thể đạt trừ khi hiệu ứng thật lớn gấp nhiều lần discovery.",
+    "power_E_at_MWU_closed_form": 0.04913646375319932,
+    "power_S_at_0.5x_MWU_monte_carlo": 0.326,
+    "power_S_at_0.7x_MWU_monte_carlo": 0.54,
+    "power_S_at_MWU_closed_form": 0.8188096492317757,
+    "power_S_at_MWU_monte_carlo": 0.824,
+    "power_audit_sha256": "c9e7f10829e00698fb027c4d2f19a894e45db3b00bf85ae451b6da1a1f16492c",
+    "sd_ic_daily": 0.09990900745167233,
+    "sd_top2_excess_daily": 0.37503148180357304,
+    "se_ic_at_n_target": 0.0019742395834422602,
+    "se_top2_excess_at_n_target": 0.007410763206428255,
+    "superseded_v1_joint_power_G1G2G3": 0.63515
+  },
+  "status": "FROZEN_PROSPECTIVE_NOT_PRODUCTION",
+  "supersedes": {
+    "reason": [
+      "G3 chỉ yêu cầu excess > 0 trong khi break-even là +0.00273: có thể PASS mà ROI kỳ vọng âm",
+      "joint power G1-G3 = 63.5%, không phải 80% danh nghĩa; cỡ mẫu 2.561 không được mô tả là 80% cho cả gate"
+    ],
+    "revision": "frozen-challenger-v1.0.0 (gate G1-G3)"
+  }
+}

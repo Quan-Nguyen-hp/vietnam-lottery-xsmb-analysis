@@ -40,6 +40,9 @@ linting = [
     "isort",
     "ruff",
 ]
+research = [
+    "scipy>=1.14",
+]
 
 [tool.isort]
 line_length = 120
