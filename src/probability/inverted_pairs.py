@@ -42,6 +42,8 @@ class InvertedPairsPredictor(BaseProbabilityModel):
     def _compute_from_S(self, S: np.ndarray) -> np.ndarray:
         # Giới hạn 365 ngày gần nhất để tăng tốc — inverted pair pattern không cần dài hạn
         S = S[-365:] if len(S) > 365 else S
+        # Chống tràn int8 khi số lần đồng xuất hiện vượt 127.
+        S = S.astype(np.float64)
 
         # Vectorized co-occurrence: co_occur[i, j] = count(i at t, j at t+1)
         co_occur = S[:-1].T @ S[1:]   # (100, 100) — matrix multiply

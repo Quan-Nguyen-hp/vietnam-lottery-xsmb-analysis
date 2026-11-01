@@ -1,0 +1,195 @@
+{
+  "classification": "retrospective_pre_holdout_comparison_not_independent_final_validation",
+  "start": "2026-01-22",
+  "end": "2026-07-20",
+  "draws": 176,
+  "bootstrap": {
+    "block_draws": 7,
+    "resamples": 5000,
+    "seed": 42
+  },
+  "precision_delta": -0.008522727272727272,
+  "precision_delta_ci95": [
+    -0.02556818181818182,
+    0.008522727272727272
+  ],
+  "precision_relative_delta": -0.03370786516853932,
+  "mean_count_hits_delta": -0.022727272727272728,
+  "count_hits_delta_ci95": [
+    -0.0625,
+    0.017045454545454544
+  ],
+  "leave_one_draw_out_precision_delta_range": [
+    -0.011428571428571429,
+    -0.005714285714285714
+  ],
+  "periods": [
+    {
+      "start": "2026-01-22",
+      "end": "2026-03-25",
+      "draws": 59,
+      "precision_delta": -0.01694915254237288,
+      "precision_delta_ci95": [
+        -0.059322033898305086,
+        0.01694915254237288
+      ]
+    },
+    {
+      "start": "2026-03-26",
+      "end": "2026-05-23",
+      "draws": 59,
+      "precision_delta": 0.0,
+      "precision_delta_ci95": [
+        -0.03389830508474576,
+        0.03389830508474576
+      ]
+    },
+    {
+      "start": "2026-05-24",
+      "end": "2026-07-20",
+      "draws": 58,
+      "precision_delta": -0.008620689655172414,
+      "precision_delta_ci95": [
+        -0.02586206896551724,
+        0.0
+      ]
+    }
+  ],
+  "policy": {
+    "original": {
+      "draws": 176,
+      "picks": 98,
+      "active_draws": 77,
+      "unique_hits": 24,
+      "count_hits": 28,
+      "precision": 0.24489795918367346,
+      "mean_hits": 0.1590909090909091,
+      "recall": 0.0057775858035245395,
+      "draw_hit_rate": 0.13068181818181818,
+      "roi": 0.047619047619047616,
+      "hit_distribution": {
+        "0": 153,
+        "1": 19,
+        "2": 3,
+        "3": 1
+      },
+      "periods": [
+        {
+          "start": "2026-01-22",
+          "end": "2026-03-25",
+          "draws": 59,
+          "picks": 24,
+          "precision": 0.25,
+          "mean_hits": 0.11864406779661017
+        },
+        {
+          "start": "2026-03-26",
+          "end": "2026-05-23",
+          "draws": 59,
+          "picks": 29,
+          "precision": 0.27586206896551724,
+          "mean_hits": 0.15254237288135594
+        },
+        {
+          "start": "2026-05-24",
+          "end": "2026-07-20",
+          "draws": 58,
+          "picks": 45,
+          "precision": 0.2222222222222222,
+          "mean_hits": 0.20689655172413793
+        }
+      ],
+      "brier": 0.1822173913480647,
+      "roi_ci95": [
+        -0.29723847517730495,
+        0.45834453405017905
+      ]
+    },
+    "corrected": {
+      "draws": 176,
+      "picks": 94,
+      "active_draws": 77,
+      "unique_hits": 23,
+      "count_hits": 27,
+      "precision": 0.24468085106382978,
+      "mean_hits": 0.1534090909090909,
+      "recall": 0.005550313076251811,
+      "draw_hit_rate": 0.125,
+      "roi": 0.05319148936170213,
+      "hit_distribution": {
+        "0": 154,
+        "1": 18,
+        "2": 3,
+        "3": 1
+      },
+      "periods": [
+        {
+          "start": "2026-01-22",
+          "end": "2026-03-25",
+          "draws": 59,
+          "picks": 24,
+          "precision": 0.25,
+          "mean_hits": 0.11864406779661017
+        },
+        {
+          "start": "2026-03-26",
+          "end": "2026-05-23",
+          "draws": 59,
+          "picks": 28,
+          "precision": 0.25,
+          "mean_hits": 0.13559322033898305
+        },
+        {
+          "start": "2026-05-24",
+          "end": "2026-07-20",
+          "draws": 58,
+          "picks": 42,
+          "precision": 0.23809523809523808,
+          "mean_hits": 0.20689655172413793
+        }
+      ],
+      "brier": 0.18223547065754706,
+      "roi_ci95": [
+        -0.2936103269818866,
+        0.4666666666666667
+      ]
+    }
+  },
+  "uniform_expected_precision": 0.23829545454545453,
+  "original_lift_vs_uniform_expectation": 0.014545454545454554,
+  "original_lift_ci95": [
+    -0.02846732954545454,
+    0.05960227272727274
+  ],
+  "corrected_lift_vs_uniform_expectation": 0.006022727272727282,
+  "corrected_lift_ci95": [
+    -0.03392045454545454,
+    0.04897727272727273
+  ],
+  "horizons": [
+    {
+      "horizon_days": 1,
+      "draws": 175,
+      "original": {
+        "precision": 0.24857142857142858,
+        "mean_count_hits": 0.5314285714285715
+      },
+      "corrected": {
+        "precision": 0.24,
+        "mean_count_hits": 0.5085714285714286
+      }
+    },
+    {
+      "horizon_days": 5,
+      "draws": 1,
+      "original": {
+        "precision": 1.0,
+        "mean_count_hits": 2.0
+      },
+      "corrected": {
+        "precision": 1.0,
+        "mean_count_hits": 2.0
+      }
+    }
+  ]
+}

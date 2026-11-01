@@ -45,6 +45,8 @@ class MarkovPredictor(BaseProbabilityModel):
         return np.full(100, 0.27)
 
     def _compute_from_S(self, S: np.ndarray) -> np.ndarray:
+        # Dùng kiểu đếm an toàn trước khi nhân ma trận lịch sử.
+        S = S.astype(np.float64)
         N = S.shape[0]
         # Transition count matrix (100 × 100): T[i, j] = count(i→j)
         trans_counts = S[:-1].T @ S[1:]  # (100, 100)

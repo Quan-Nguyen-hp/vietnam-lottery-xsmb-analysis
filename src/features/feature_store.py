@@ -38,7 +38,7 @@ try:
 except ImportError:
     from evidence.store import EvidenceStore
 
-FEATURE_STORE_VERSION = "v1"
+FEATURE_STORE_VERSION = "v2"
 
 
 class FeatureStore:
@@ -104,7 +104,7 @@ class FeatureStore:
     def _ensure_version_metadata(self) -> None:
         meta_path = self._version_dir / "metadata.json"
         if not meta_path.exists():
-            extractors = self._static_extractors + self._dynamic_extractors
+            extractors = self._static_extractors + [MarkovFeatureExtractor, BayesianFeatureExtractor]
             meta = {
                 "feature_version": self._version,
                 "extractor_versions": {e.name: e.version for e in extractors},
@@ -161,17 +161,29 @@ class FeatureStore:
             DataFrame 100 rows × N_features cols.
             Luôn có cột 'number' và 'date' ở đầu.
         """
+        # Cache phải gắn với lịch sử nguồn; cache cũ thiếu provenance được tính lại.
+        S = S if S is not None else self._S
+        if not (df_evidence['date'] == date_str).all():
+            raise ValueError('Feature evidence date must match the target date')
+        if S is not None and not (df_evidence['history_days'] == len(S)).all():
+            raise ValueError('Feature matrix must match the evidence history length')
+        history_hash = df_evidence.attrs.get('source_history_hash')
+        s_hash = hashlib.sha256(np.asarray(S, dtype=np.uint8).tobytes()).hexdigest() if S is not None else None
+        signature = [history_hash, s_hash, self._version, BayesianFeatureExtractor.version]
+
         # 1. RAM cache
         if use_cache and date_str in self._ram_cache:
-            return self._ram_cache[date_str]
+            cached = self._ram_cache[date_str]
+            if history_hash and cached.attrs.get('cache_signature') == signature:
+                return cached
 
         # 2. Parquet cache
         parquet = self.snapshot_path(date_str)
-        if parquet.exists():
+        if use_cache and parquet.exists():
             df = pd.read_parquet(parquet)
-            if use_cache:
+            if history_hash and df.attrs.get('cache_signature') == signature:
                 self._ram_cache[date_str] = df
-            return df
+                return df
 
         # 3. Compute from scratch
         if S is not None:
@@ -185,12 +197,13 @@ class FeatureStore:
                 df_feat = ext.extract(df_evidence)
                 feature_frames.append(df_feat)
             except Exception as e:
-                print(f"[FeatureStore] Warning: {ext.name} failed: {e}")
+                raise RuntimeError(f'Feature extractor {ext.name} failed') from e
 
         # Assemble
         df_all = pd.concat(
             [df_evidence[["number", "date"]]] + feature_frames, axis=1
         )
+        df_all.attrs['cache_signature'] = signature
 
         # Save to parquet
         if save_parquet:

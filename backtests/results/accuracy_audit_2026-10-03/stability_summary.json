@@ -1,0 +1,227 @@
+{
+  "classification": "retrospective_fixed_signal_stability_diagnostic_not_untouched_holdout",
+  "seed": 42,
+  "periods": {
+    "count_ewma90": [
+      {
+        "start": "2009-01-01",
+        "end": "2014-12-31",
+        "draws": 2166,
+        "unique_hits": 1078,
+        "precision": 0.24884579870729456,
+        "mean_count_hits": 0.5720221606648199,
+        "roi": 0.0487072945521699,
+        "precision_lift_vs_uniform_expectation": 0.010443213296398898,
+        "lift_ci95": [
+          -0.0023506463527239066,
+          0.023099145891043386
+        ]
+      },
+      {
+        "start": "2015-01-01",
+        "end": "2020-12-31",
+        "draws": 2146,
+        "unique_hits": 1051,
+        "precision": 0.24487418452935694,
+        "mean_count_hits": 0.5633737185461324,
+        "roi": 0.032851817334575956,
+        "precision_lift_vs_uniform_expectation": 0.006220876048462265,
+        "lift_ci95": [
+          -0.006906337371854607,
+          0.019236020503261887
+        ]
+      },
+      {
+        "start": "2021-01-01",
+        "end": "2025-12-31",
+        "draws": 1806,
+        "unique_hits": 864,
+        "precision": 0.23920265780730898,
+        "mean_count_hits": 0.5376522702104097,
+        "roi": -0.014304171280915467,
+        "precision_lift_vs_uniform_expectation": 0.0012236987818383242,
+        "lift_ci95": [
+          -0.011750968992248053,
+          0.014336240310077516
+        ]
+      }
+    ],
+    "frequency_30": [
+      {
+        "start": "2009-01-01",
+        "end": "2014-12-31",
+        "draws": 2166,
+        "unique_hits": 1074,
+        "precision": 0.24792243767313019,
+        "mean_count_hits": 0.569713758079409,
+        "roi": 0.044475223145583255,
+        "precision_lift_vs_uniform_expectation": 0.009519852262234542,
+        "lift_ci95": [
+          -0.0033624192059095023,
+          0.02260422437673131
+        ]
+      },
+      {
+        "start": "2015-01-01",
+        "end": "2020-12-31",
+        "draws": 2146,
+        "unique_hits": 1055,
+        "precision": 0.24580615097856476,
+        "mean_count_hits": 0.5549860205032618,
+        "roi": 0.017474370922646785,
+        "precision_lift_vs_uniform_expectation": 0.007152842497670091,
+        "lift_ci95": [
+          -0.0057552423112767846,
+          0.019529356943150056
+        ]
+      },
+      {
+        "start": "2021-01-01",
+        "end": "2025-12-31",
+        "draws": 1806,
+        "unique_hits": 832,
+        "precision": 0.23034330011074197,
+        "mean_count_hits": 0.5299003322259136,
+        "roi": -0.02851605758582503,
+        "precision_lift_vs_uniform_expectation": -0.007635658914728675,
+        "lift_ci95": [
+          -0.02176093576965669,
+          0.0062912513842746315
+        ]
+      }
+    ],
+    "frequency_365": [
+      {
+        "start": "2009-01-01",
+        "end": "2014-12-31",
+        "draws": 2166,
+        "unique_hits": 1059,
+        "precision": 0.24445983379501385,
+        "mean_count_hits": 0.5581717451523546,
+        "roi": 0.023314866112650046,
+        "precision_lift_vs_uniform_expectation": 0.006057248384118196,
+        "lift_ci95": [
+          -0.006888388734995374,
+          0.01905851800554017
+        ]
+      },
+      {
+        "start": "2015-01-01",
+        "end": "2020-12-31",
+        "draws": 2146,
+        "unique_hits": 958,
+        "precision": 0.22320596458527492,
+        "mean_count_hits": 0.5093196644920783,
+        "roi": -0.06624728176452314,
+        "precision_lift_vs_uniform_expectation": -0.01544734389561975,
+        "lift_ci95": [
+          -0.02787080615097856,
+          -0.0028370223671947857
+        ]
+      },
+      {
+        "start": "2021-01-01",
+        "end": "2025-12-31",
+        "draws": 1806,
+        "unique_hits": 863,
+        "precision": 0.23892580287929124,
+        "mean_count_hits": 0.5470653377630121,
+        "roi": 0.0029531192321889995,
+        "precision_lift_vs_uniform_expectation": 0.0009468438538206049,
+        "lift_ci95": [
+          -0.012575581395348829,
+          0.015299695459579177
+        ]
+      }
+    ],
+    "frequency_90": [
+      {
+        "start": "2009-01-01",
+        "end": "2014-12-31",
+        "draws": 2166,
+        "unique_hits": 1024,
+        "precision": 0.2363804247460757,
+        "mean_count_hits": 0.551708217913204,
+        "roi": 0.011465066174207448,
+        "precision_lift_vs_uniform_expectation": -0.0020221606648199385,
+        "lift_ci95": [
+          -0.014464450600184664,
+          0.010360457063711916
+        ]
+      },
+      {
+        "start": "2015-01-01",
+        "end": "2020-12-31",
+        "draws": 2146,
+        "unique_hits": 1082,
+        "precision": 0.25209692451071763,
+        "mean_count_hits": 0.5671015843429636,
+        "roi": 0.03968623796210003,
+        "precision_lift_vs_uniform_expectation": 0.013443616029822936,
+        "lift_ci95": [
+          0.00040994874184530067,
+          0.026211672879776333
+        ]
+      },
+      {
+        "start": "2021-01-01",
+        "end": "2025-12-31",
+        "draws": 1806,
+        "unique_hits": 855,
+        "precision": 0.2367109634551495,
+        "mean_count_hits": 0.5337763012181617,
+        "roi": -0.021410114433370247,
+        "precision_lift_vs_uniform_expectation": -0.0012679955703211443,
+        "lift_ci95": [
+          -0.015167081949058686,
+          0.013007475083056476
+        ]
+      }
+    ],
+    "frequency_all": [
+      {
+        "start": "2009-01-01",
+        "end": "2014-12-31",
+        "draws": 2166,
+        "unique_hits": 1072,
+        "precision": 0.247460757156048,
+        "mean_count_hits": 0.5660203139427517,
+        "roi": 0.03770390889504463,
+        "precision_lift_vs_uniform_expectation": 0.009058171745152362,
+        "lift_ci95": [
+          -0.0025352031394275092,
+          0.020591643582640814
+        ]
+      },
+      {
+        "start": "2015-01-01",
+        "end": "2020-12-31",
+        "draws": 2146,
+        "unique_hits": 1001,
+        "precision": 0.2332246039142591,
+        "mean_count_hits": 0.52143522833178,
+        "roi": -0.044035414725069895,
+        "precision_lift_vs_uniform_expectation": -0.005428704566635595,
+        "lift_ci95": [
+          -0.01814107642124883,
+          0.00726060111835974
+        ]
+      },
+      {
+        "start": "2021-01-01",
+        "end": "2025-12-31",
+        "draws": 1806,
+        "unique_hits": 820,
+        "precision": 0.22702104097452935,
+        "mean_count_hits": 0.521594684385382,
+        "roi": -0.043743078626799554,
+        "precision_lift_vs_uniform_expectation": -0.0109579180509413,
+        "lift_ci95": [
+          -0.024243632336655586,
+          0.0025582779623477365
+        ]
+      }
+    ]
+  },
+  "dataset_sha256": "67a1563eb90f90a5375a5b639eb4368f510ee0c25a32c363c36b93f28fb4ed33"
+}

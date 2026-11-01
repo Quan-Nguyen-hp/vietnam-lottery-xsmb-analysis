@@ -1,0 +1,16 @@
+{
+  "full_suite": {
+    "command": "uv run --no-sync python -m pytest -q --basetemp .cache/pytest-accuracy-completion",
+    "passed": 112,
+    "failed": 0,
+    "elapsed_seconds": 43.00
+  },
+  "affected_regression_tests": {"passed": 20, "failed": 0},
+  "ruff_new_runner_tests_and_artifact_scripts": "passed",
+  "git_diff_check": "passed",
+  "archived_sources_and_forecasts_sha256": "matched",
+  "archive_rescoring_metrics": {"original_identical": true, "corrected_identical": true},
+  "stability_reproduction": {"summary_identical": true, "daily_scores_byte_identical": true},
+  "gitnexus_tracked_scope": {"changed_files": 9, "risk_level": "critical"},
+  "independent_review": {"critical_findings": 0, "important_findings": 0, "minor_findings_resolved": 2}
+}

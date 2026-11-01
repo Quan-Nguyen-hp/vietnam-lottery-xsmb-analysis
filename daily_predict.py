@@ -27,7 +27,7 @@ import pandas as pd
 
 from data.loader import DataLoader
 from evidence.builder import EvidenceBuilder
-from evidence.store import EvidenceStore
+from evidence.store import EvidenceStore, EVIDENCE_VERSION
 from features.feature_store import FeatureStore
 from probability import get_all_models
 from probability.count_expectation import EWMAHitCountChallenger
@@ -126,6 +126,20 @@ def compute_ece(probs: np.ndarray, labels: np.ndarray, n_bins: int = 10) -> floa
     return float(ece)
 
 
+def chronological_prior_entries(entries: list[dict], target_date: date) -> list[dict]:
+    """Keep one dated record per past draw; future/undated weights are unavailable at T."""
+    by_date = {}
+    for entry in entries:
+        raw_date = entry.get('pipeline_metadata', {}).get('date', entry.get('date'))
+        try:
+            entry_date = date.fromisoformat(raw_date)
+        except (TypeError, ValueError):
+            continue
+        if entry_date < target_date:
+            by_date[entry_date] = entry
+    return [by_date[d] for d in sorted(by_date)]
+
+
 def run_shared_prediction_pipeline(
     target_date: date,
     top_k: int = 2,
@@ -136,7 +150,7 @@ def run_shared_prediction_pipeline(
     target_date_str = str(target_date)
 
     # Đọc log lịch sử để lấy trọng số ngày hôm trước phục vụ EMA smoothing
-    log = prior_entries if prior_entries is not None else load_log()
+    log = chronological_prior_entries(prior_entries if prior_entries is not None else load_log(), target_date)
     prev_weights = {}
     if log:
         # Lấy bản ghi cuối cùng có dynamic_weights
@@ -159,11 +173,13 @@ def run_shared_prediction_pipeline(
     # slice_history dùng mốc exclusive; +1 để bao gồm đúng ngày lịch sử gần nhất.
     history_end_idx = history_indices[-1] + 1
     df_hist, S_hist = loader.slice_history(history_end_idx)
+    if history_end_idx <= 140:
+        raise ValueError('Insufficient history for training and 90-day validation')
 
     # 1. Evidence & Feature Engine
     evidence_store = EvidenceStore()
     evidence_builder = EvidenceBuilder(evidence_store)
-    feature_store = FeatureStore(S_history=loader.S, evidence_store=evidence_store)
+    feature_store = FeatureStore(S_history=S_hist, evidence_store=evidence_store)
 
     df_ev = evidence_builder.build_all(df_hist, S_hist, target_dt, save=True)
     df_feat = feature_store.build(df_ev, target_date_str, S=S_hist)
@@ -352,7 +368,9 @@ def run_shared_prediction_pipeline(
         model_probas=model_probas,
         S_history=S_hist,
         df_features=df_feat,
-        feature_importance_df=lgb_model.feature_importance()
+        feature_importance_df=lgb_model.feature_importance(),
+        feature_version=feature_store.version,
+        evidence_version=EVIDENCE_VERSION,
     )
 
     # §7: Truyền Kelly capital info vào DayDecision
@@ -389,7 +407,7 @@ def run_shared_prediction_pipeline(
     
     # Save raw probabilities for authentic scientific audit & schema version tagging
     decision_dict["pipeline_metadata"]["schema_version"] = "2.0"
-    decision_dict["pipeline_metadata"]["prediction_engine_version"] = "1.3.2"
+    decision_dict["pipeline_metadata"]["prediction_engine_version"] = "1.3.3"
     decision_dict["pipeline_metadata"]["belief_engine_version"] = "1.3.1"
     decision_dict["ensemble_proba"] = [float(p) for p in meta_proba]
     decision_dict["model_probas"] = {

@@ -15,7 +15,7 @@ from .base import BaseFeatureExtractor
 
 class BayesianFeatureExtractor(BaseFeatureExtractor):
     name = "bayesian_features"
-    version = "1.0"
+    version = "1.2"
 
     def __init__(self, S_history: np.ndarray):
         """
@@ -27,7 +27,8 @@ class BayesianFeatureExtractor(BaseFeatureExtractor):
 
     def _precompute(self) -> None:
         """Pre-compute transition and co-occurrence matrices."""
-        S = self._S
+        # Đổi kiểu TRƯỚC phép nhân; int8 chỉ đếm đúng đến 127.
+        S = self._S.astype(np.float64) if self._S is not None else None
         N = S.shape[0] if S is not None else 0
 
         if N > 1:
@@ -79,20 +80,20 @@ class BayesianFeatureExtractor(BaseFeatureExtractor):
 
             # Base frequency (prior)
             p_prior = float(row.get("freq_30d", 0.27)) if "freq_30d" in row.index else 0.27
-            yesterday_actives = row.get("yesterday_actives", [])
+            yesterday_actives = list(row.get("yesterday_actives", []))
 
             # P(num | yesterday_actives) — Bạc nhớ với bộ lọc làm mịn EWMA 3 ngày
             f["cond_prob_yesterday"] = float(ewma_cond_yest[num]) if N >= 1 else p_prior
 
             # P(num | yesterday head câm)
-            head_cam = row.get("yesterday_head_cam", [])
+            head_cam = list(row.get("yesterday_head_cam", []))
             if head_cam:
                 f["cond_prob_head_cam"] = float(np.mean(self._C_head[head_cam, num]))
             else:
                 f["cond_prob_head_cam"] = p_prior
 
             # P(num | yesterday tail câm)
-            tail_cam = row.get("yesterday_tail_cam", [])
+            tail_cam = list(row.get("yesterday_tail_cam", []))
             if tail_cam:
                 f["cond_prob_tail_cam"] = float(np.mean(self._C_tail[tail_cam, num]))
             else:

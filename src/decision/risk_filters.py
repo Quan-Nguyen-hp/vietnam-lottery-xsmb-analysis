@@ -39,6 +39,8 @@ class RiskFilters:
         """
         # Giới hạn 1800 ngày gần nhất
         S = S_history[-1800:] if len(S_history) > 1800 else S_history
+        # Cast sau phép nhân là quá muộn: int8 đã mất thông tin đếm.
+        S = S.astype(np.float64)
         N = S.shape[0]
         if N < 50:
             self._mi_matrix = np.eye(100)
@@ -73,7 +75,7 @@ class RiskFilters:
         )
         
         # Entropy
-        H = - (P_1 * np.log(P_1 + 1e-12) + P_0 * np.log(P_0 + 1e-12))
+        H = -(P_1 * np.log(np.clip(P_1, 1e-12, 1.0)) + P_0 * np.log(np.clip(P_0, 1e-12, 1.0)))
         H_geom = np.sqrt(H[:, np.newaxis] * H[np.newaxis, :])
         
         NMI = np.divide(I_XY, H_geom + 1e-12, out=np.zeros_like(I_XY), where=H_geom > 0)

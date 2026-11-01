@@ -11,7 +11,7 @@ from typing import Optional
 import pandas as pd
 import numpy as np
 
-EVIDENCE_VERSION = "v1.0"
+EVIDENCE_VERSION = "v1.1"
 
 
 class EvidenceStore:
@@ -31,7 +31,8 @@ class EvidenceStore:
 
     def __init__(self, store_root: Optional[Path] = None):
         if store_root is None:
-            store_root = Path(__file__).parent.parent.parent / "predictions" / "EvidenceStore"
+            # Giữ nguyên snapshot legacy; namespace mới chứa provenance của history.
+            store_root = Path(__file__).parent.parent.parent / "predictions" / "EvidenceStore" / EVIDENCE_VERSION
         self._root = store_root
         self._root.mkdir(parents=True, exist_ok=True)
         self._ensure_metadata()

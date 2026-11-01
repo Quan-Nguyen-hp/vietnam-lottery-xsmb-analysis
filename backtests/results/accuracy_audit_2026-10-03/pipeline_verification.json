@@ -1,0 +1,19 @@
+{
+  "ensemble_proba": {
+    "replay_max_abs_delta": 0.0,
+    "future_poison_max_abs_delta": 0.0
+  },
+  "raw_lgb_proba": {
+    "replay_max_abs_delta": 0.0,
+    "future_poison_max_abs_delta": 0.0
+  },
+  "calibrated_lgb_proba": {
+    "replay_max_abs_delta": 0.0,
+    "future_poison_max_abs_delta": 0.0
+  },
+  "feature_version": "v2",
+  "evidence_version": "v1.1",
+  "engine_version": "1.3.3",
+  "date": "2026-01-22",
+  "test": "real_pipeline_reproducibility_and_target_future_data_and_weights_poisoning"
+}

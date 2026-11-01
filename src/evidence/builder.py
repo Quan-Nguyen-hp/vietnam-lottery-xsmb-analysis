@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -49,11 +50,19 @@ class EvidenceBuilder:
         """
         date_str = target_date.strftime("%Y-%m-%d")
         N = len(df_history)
+        if S_history.shape != (N, 100):
+            raise ValueError('Evidence history and binary matrix must have matching rows')
+        if N and (pd.to_datetime(df_history['date']) >= pd.Timestamp(target_date)).any():
+            raise ValueError('Evidence history must contain only dates before the target')
+        history_hash = hashlib.sha256(
+            pd.util.hash_pandas_object(df_history, index=False).values.tobytes()
+            + np.asarray(S_history, dtype=np.uint8).tobytes()
+        ).hexdigest()
 
         # Kiểm tra cache
         if self._store.exists(date_str):
             cached = self._store.load(date_str)
-            if cached is not None:
+            if cached is not None and cached.attrs.get('source_history_hash') == history_hash:
                 return cached
 
         rows = []
@@ -62,6 +71,7 @@ class EvidenceBuilder:
             rows.append(ev)
 
         df_ev = pd.DataFrame(rows)
+        df_ev.attrs['source_history_hash'] = history_hash
 
         if save:
             self._store.save(date_str, df_ev)

@@ -1,0 +1,54 @@
+--- replayed/daily_predict.py
++++ final/daily_predict.py
+@@ -27,7 +27,7 @@
+ 
+ from data.loader import DataLoader
+ from evidence.builder import EvidenceBuilder
+-from evidence.store import EvidenceStore
++from evidence.store import EvidenceStore, EVIDENCE_VERSION
+ from features.feature_store import FeatureStore
+ from probability import get_all_models
+ from probability.count_expectation import EWMAHitCountChallenger
+@@ -368,7 +368,9 @@
+         model_probas=model_probas,
+         S_history=S_hist,
+         df_features=df_feat,
+-        feature_importance_df=lgb_model.feature_importance()
++        feature_importance_df=lgb_model.feature_importance(),
++        feature_version=feature_store.version,
++        evidence_version=EVIDENCE_VERSION,
+     )
+ 
+     # §7: Truyền Kelly capital info vào DayDecision
+--- replayed/src\evidence\store.py
++++ final/src\evidence\store.py
+@@ -11,7 +11,7 @@
+ import pandas as pd
+ import numpy as np
+ 
+-EVIDENCE_VERSION = "v1.0"
++EVIDENCE_VERSION = "v1.1"
+ 
+ 
+ class EvidenceStore:
+@@ -31,7 +31,8 @@
+ 
+     def __init__(self, store_root: Optional[Path] = None):
+         if store_root is None:
+-            store_root = Path(__file__).parent.parent.parent / "predictions" / "EvidenceStore"
++            # Giữ nguyên snapshot legacy; namespace mới chứa provenance của history.
++            store_root = Path(__file__).parent.parent.parent / "predictions" / "EvidenceStore" / EVIDENCE_VERSION
+         self._root = store_root
+         self._root.mkdir(parents=True, exist_ok=True)
+         self._ensure_metadata()
+--- replayed/src\features\feature_store.py
++++ final/src\features\feature_store.py
+@@ -104,7 +104,7 @@
+     def _ensure_version_metadata(self) -> None:
+         meta_path = self._version_dir / "metadata.json"
+         if not meta_path.exists():
+-            extractors = self._static_extractors + self._dynamic_extractors
++            extractors = self._static_extractors + [MarkovFeatureExtractor, BayesianFeatureExtractor]
+             meta = {
+                 "feature_version": self._version,
+                 "extractor_versions": {e.name: e.version for e in extractors},

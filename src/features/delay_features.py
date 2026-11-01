@@ -24,7 +24,9 @@ class DelayFeatureExtractor(BaseFeatureExtractor):
         for _, row in df_evidence.iterrows():
             f = {}
             current_delay = float(row["current_delay"])
-            hist_gaps: list = row["historical_delays"] if row["historical_delays"] else [current_delay]
+            hist_gaps = row["historical_delays"]
+            if len(hist_gaps) == 0:
+                hist_gaps = [current_delay]
             hist_arr = np.array(hist_gaps, dtype=float)
 
             # Raw delay

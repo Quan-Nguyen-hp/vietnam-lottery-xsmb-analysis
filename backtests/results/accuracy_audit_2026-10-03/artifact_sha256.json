@@ -1,0 +1,21 @@
+{
+  "compare_replays.py": "a2eea794a767d2cfea2207a7f807cbc2942193f42095580985d09ca5b5c79402",
+  "comparison.json": "18b4a2c4a062a9d923d662a21aca9d76a2f3e90765b34db9b641607921c12f00",
+  "corrected_daily_scores.csv": "6e25709198ea49f7ba09a6402b88daa047bfe13d9e350a21353bd9b978529374",
+  "corrected_forecasts.jsonl.gz": "fa892eb89a78723fe05b46c7953aaae4700ef5b6c52df156276c6994b66dc5e7",
+  "corrected_source.zip": "2813678b9128b828fd27667f1302dc3fa68b5e031ccd09d7182face25d92ffca",
+  "corrected_summary.json": "474d250f574128245246819d452355a775777282445692965efc7835613f7e99",
+  "final_source_sha256.json": "7315efb0ddbab4da538bc1b354a5c98966e4d1e8f914b08baeb7a81550a4b124",
+  "history.csv.gz": "8b71cb8ddd08e3b0de9721fb52200b389d2a4643b4d36052a6fee1bdb74e00c6",
+  "metadata_changes_after_source_freeze.patch": "1d3d7d1e25c0757e1ebfd01b4dd04c83f868a21d1d9ac537e01f538fe5f88f94",
+  "original_daily_scores.csv": "a9c918612f3ce9ab3534e8015ce6c4163260cd3cacf47db2e8bafebc2b1db4f5",
+  "original_forecasts.jsonl.gz": "7b891b1d15ad6b96101e88610c70083f21f43622b147a8cb4f7c77e45667d3d5",
+  "original_source.zip": "4de011596303c140df8e5780daac78327e9874c5ee0781f19dd56f53d6db6863",
+  "original_summary.json": "3e1a7419b2c8c2e05f6d36f4dcc9aa5b7400d0a0e1862dc4b58814e4220d583c",
+  "pipeline_verification.json": "18d5331649055f75454f7e667957433a3bfb27377002ea3690cfe1e73e1b2318",
+  "reproduce_stability.py": "3b13c9cd1b92b50174eaeb8d5fa93cc601bf6619b40db298ca1608735308d0ad",
+  "stability_daily_scores.csv": "933bda703b11bff5189736029e0d9d2f2dc2eaedab6581b40152fb8579a30a96",
+  "stability_summary.json": "752806cde7c9674999aa58ae416b267c984b23a69a6a5b3e88c41cbc74f40b65",
+  "verification_summary.json": "9d447ac1e7db86b32b7378b8108bdfed70bdff66cb926104cc5cec29c081d9f7",
+  "../accuracy_audit_2026-10-03.md": "902e2f690ff53184f058f640337bec2882ccf7065b1fe1febe49256112bfc437"
+}
