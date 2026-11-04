@@ -3,8 +3,8 @@
 - **Trạng thái**: **PENDING**
 - **Holdout bắt đầu**: 2026-07-21
 - **Yêu cầu tối thiểu**: 180 ngày
-- **Dữ liệu hiện có**: 106 ngày (2026-07-21 → 2026-11-03)
-- **Prediction log trong holdout**: 105 bản ghi
+- **Dữ liệu hiện có**: 107 ngày (2026-07-21 → 2026-11-04)
+- **Prediction log trong holdout**: 106 bản ghi
 - **Bản ghi đã có actual result**: 76
 
 > Có bản ghi log trước ngày bắt đầu holdout; các bản ghi này bị loại khỏi đánh giá.
